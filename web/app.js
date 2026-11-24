@@ -306,10 +306,19 @@ form.addEventListener('submit', async (event) => {
     document.querySelector('#resultCompany').textContent = companyInput.value.trim();
     document.querySelector('#modelUsed').textContent = result.model ? ` · ${result.model}` : '';
     const jobMatch = document.querySelector('#jobMatch');
-    if (result.job_posting) {
-      document.querySelector('#jobMatchLink').href = result.job_posting.source_url;
-      document.querySelector('#jobMatchLink').textContent = result.job_posting.title;
-      document.querySelector('#jobMatchSource').textContent = `Source: ${result.job_posting.source_title}`;
+    const jobContext = result.job_posting || result.job_context;
+    if (jobContext) {
+      const jobMatchLink = document.querySelector('#jobMatchLink');
+      document.querySelector('#jobMatchLabel').textContent = result.job_posting ? 'Matching public listing:' : 'Role context:';
+      jobMatchLink.textContent = jobContext.title;
+      jobMatchLink.hidden = !result.job_posting;
+      if (result.job_posting) {
+        jobMatchLink.href = result.job_posting.source_url;
+        document.querySelector('#jobMatchSource').textContent = `Source: ${result.job_posting.source_title}`;
+      } else {
+        jobMatchLink.removeAttribute('href');
+        document.querySelector('#jobMatchSource').textContent = jobContext.source_title;
+      }
       jobMatch.hidden = false;
     } else {
       jobMatch.hidden = true;
