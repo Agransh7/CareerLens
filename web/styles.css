@@ -111,6 +111,21 @@ body { margin: 0; min-height: 100vh; background: var(--paper); }
 .keep-button:disabled { border-color: #cbc9c1; color: #8b8f94; background: #f2efeb; cursor: not-allowed; }
 .resume-preview { max-height: 520px; overflow: auto; margin: 0; padding: 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: #414a58; font: 12px/1.6 Consolas, "Courier New", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .empty-state { padding: 12px; border: 1px dashed #cbc9c1; border-radius: 5px; color: #687181; background: #fcfaf5; font-size: 12px; line-height: 1.5; }
+.learning-panel { margin-top: 21px; padding: 15px; border: 1px solid #dfc99f; border-radius: 6px; background: #fff9e9; }
+.learning-panel .subsection-heading h3 { color: #625127; }
+.learning-panel .subsection-heading p { color: #766b4d; }
+.technical-gap-list { display: grid; gap: 9px; }
+.technical-gap-card { padding: 12px; border: 1px solid #eadbb9; border-radius: 5px; background: #fffdf7; }
+.technical-gap-card h4 { margin: 0; color: #3f4652; font: 700 13px Arial, sans-serif; }
+.technical-gap-card blockquote { margin: 6px 0 0; padding: 7px 9px; border-left: 3px solid #c49a45; background: #f8f1dd; color: #5e563f; font-size: 11px; line-height: 1.5; white-space: pre-wrap; }
+.technical-gap-card > p { margin: 8px 0 0; color: #626b79; font-size: 12px; line-height: 1.5; }
+.technical-gap-card > .practice-step { color: #51492f; }
+.practice-step strong { color: #665221; }
+.learning-notes-label { display: block; margin: 14px 0 6px; color: #51492f; font-size: 11px; font-weight: 700; }
+.learning-notes { display: block; width: 100%; min-height: 95px; padding: 10px; border: 1px solid #ddcfac; border-radius: 5px; background: #fffefa; color: var(--ink); font: 12px/1.55 Arial, sans-serif; resize: vertical; }
+.learning-notes:focus { border-color: #bf9342; outline: 2px solid #f3e7c8; }
+.notes-footer { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.notes-footer #notesSavedStatus { color: #766b4d; font-size: 11px; }
 .page-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 24px; padding: 13px 2px 20px; border-top: 1px solid var(--line); color: #686f7b; font-size: 11px; }
 
 @media (max-width: 600px) {

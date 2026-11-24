@@ -13,6 +13,7 @@ let selectedFile = null;
 let generatedMarkdown = '';
 let originalResumeText = '';
 let currentSuggestions = [];
+let learningNotesStorageKey = '';
 
 for (const chip of document.querySelectorAll('.company-chip')) {
   chip.addEventListener('click', () => {
@@ -160,6 +161,45 @@ function renderSuggestions(suggestions) {
   updatePreview();
 }
 
+function renderTechnicalLearningNotes(notes, jobDescription) {
+  const container = document.querySelector('#technicalGapList');
+  container.replaceChildren();
+  if (!jobDescription.trim()) {
+    container.innerHTML = '<p class="empty-state">Add the job description to identify its explicit technical requirements. A company name or role title alone is not enough to claim a skill gap.</p>';
+  } else if (!notes.length) {
+    container.innerHTML = '<p class="empty-state">No explicit technical requirements missing from the resume were verified in this posting.</p>';
+  } else {
+    for (const item of notes) {
+      const card = document.createElement('article');
+      card.className = 'technical-gap-card';
+      const skill = document.createElement('h4');
+      skill.textContent = item.skill;
+      const quoteLabel = document.createElement('div');
+      quoteLabel.className = 'evidence-label';
+      quoteLabel.textContent = 'FROM THE JOB DESCRIPTION';
+      const quote = document.createElement('blockquote');
+      quote.textContent = item.job_quote;
+      const reason = document.createElement('p');
+      reason.textContent = item.why_it_matters;
+      const practice = document.createElement('p');
+      practice.className = 'practice-step';
+      practice.innerHTML = `<strong>Try this:</strong> ${escapeHtml(item.practice_step)}`;
+      card.append(skill, quoteLabel, quote, reason, practice);
+      container.append(card);
+    }
+  }
+
+  const keySource = `${companyInput.value.trim()}|${document.querySelector('#role').value.trim()}|${jobDescription.trim()}`.toLocaleLowerCase();
+  let hash = 2166136261;
+  for (let index = 0; index < keySource.length; index += 1) hash = Math.imul(hash ^ keySource.charCodeAt(index), 16777619);
+  learningNotesStorageKey = `careerlens-learning-${hash >>> 0}`;
+  const defaultNotes = notes.map((item) => `${item.skill}\nWhy it matters: ${item.why_it_matters}\nPractice: ${item.practice_step}`).join('\n\n');
+  let savedNotes = '';
+  try { savedNotes = localStorage.getItem(learningNotesStorageKey) || ''; } catch {}
+  document.querySelector('#learningNotes').value = savedNotes || defaultNotes;
+  document.querySelector('#notesSavedStatus').textContent = savedNotes ? 'Saved in this browser' : '';
+}
+
 function replaceSourceExcerpt(text, quote, replacement) {
   if (!quote.trim()) return text;
   const pattern = quote.trim().split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
@@ -202,6 +242,7 @@ form.addEventListener('submit', async (event) => {
     if (!response.ok) throw new Error(result.error || 'Could not tailor the resume. Please try again.');
     renderRequirements(result.requirements || []);
     renderSuggestions(result.suggestions || []);
+    renderTechnicalLearningNotes(result.technical_learning_notes || [], document.querySelector('#jobDescription').value);
     document.querySelector('#resultCompany').textContent = companyInput.value.trim();
     document.querySelector('#modelUsed').textContent = result.model ? ` · ${result.model}` : '';
     resultSection.hidden = false;
@@ -227,5 +268,16 @@ document.querySelector('#copyButton').addEventListener('click', async (event) =>
   await navigator.clipboard.writeText(generatedMarkdown);
   event.currentTarget.textContent = 'Copied';
   setTimeout(() => { event.currentTarget.textContent = 'Copy text'; }, 1600);
+});
+document.querySelector('#saveLearningNotes').addEventListener('click', () => {
+  try {
+    localStorage.setItem(learningNotesStorageKey, document.querySelector('#learningNotes').value);
+    document.querySelector('#notesSavedStatus').textContent = 'Saved in this browser';
+  } catch {
+    document.querySelector('#notesSavedStatus').textContent = 'Could not save notes in this browser';
+  }
+});
+document.querySelector('#learningNotes').addEventListener('input', () => {
+  document.querySelector('#notesSavedStatus').textContent = 'Unsaved changes';
 });
 

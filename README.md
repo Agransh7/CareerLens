@@ -25,6 +25,7 @@ In VS Code, run **Ctrl+Shift+P → Tasks: Run Task → CareerLens: commit and pu
 - Upload a PDF, DOCX, or TXT resume; browser-side text extraction keeps files local.
 - Optionally enter a target role and job description.
 - Evidence Mode maps role requirements to exact resume excerpts and proposes edits that preserve their source quote.
+- A technical learning panel lists explicitly named job-posting skills that are not evidenced in the resume, suggests a practice step, and lets you save personal notes in the browser.
 - Review, edit, add, or remove suggestions; unverified quotes cannot be applied to the preview.
 - Each suggestion includes an interview question. Suggestions flagged for confirmation must be cleared before copying or downloading.
 - Copy or download the updated resume preview as Markdown.

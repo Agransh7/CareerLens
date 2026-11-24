@@ -119,6 +119,9 @@ Return only a JSON object with exactly these top-level arrays:
   ],
   "suggestions": [
     {{"requirement": "one requirement above", "source_quote": "verbatim complete resume bullet or line", "rewrite": "revised bullet using only supported facts", "reason": "why this wording fits the requirement", "interview_question": "a question the candidate should be ready to answer", "needs_confirmation": false}}
+  ],
+  "technical_learning_notes": [
+    {{"skill": "technical skill/tool required by the posting", "job_quote": "verbatim excerpt from the job description", "why_it_matters": "brief reason this skill is relevant", "practice_step": "a small project or study task to build it"}}
   ]
 }}
 
@@ -130,6 +133,9 @@ Rules:
 - Set needs_confirmation to true when a rewrite depends on an ambiguous detail or would benefit from the candidate checking accuracy.
 - Make 3 to 8 concise requirements when a job description is supplied. If no job description is supplied, label requirements as role-based in their wording and do not imply access to private company criteria.
 - Return at most 8 suggestions. Use an empty suggestions array when the resume contains no supporting evidence.
+- technical_learning_notes must list only explicit technical skills, tools, frameworks, or platforms in the supplied job description that are not evidenced anywhere in the resume. Do not infer that the candidate lacks a skill merely because the resume omits it; describe these as "not shown in this resume" study candidates.
+- Each technical learning note must include a verbatim job_quote from the supplied job description. Do not include guessed company requirements, generic soft skills, or requirements already clearly evidenced in the resume.
+- If no job description was supplied, return an empty technical_learning_notes array.
 
 Company: {data['company']}
 Target role: {role}
@@ -144,7 +150,7 @@ def normalized_evidence(value: str) -> str:
     return " ".join(value.split())
 
 
-def parse_evidence_response(response_text: str, resume: str) -> dict:
+def parse_evidence_response(response_text: str, resume: str, job_description: str = "") -> dict:
     cleaned = response_text.strip()
     if cleaned.startswith("```"):
         cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
@@ -156,6 +162,7 @@ def parse_evidence_response(response_text: str, resume: str) -> dict:
         raise RuntimeError("Gemini returned evidence data in an unexpected format. Please try again.")
 
     source = normalized_evidence(resume)
+    job_source = normalized_evidence(job_description)
     requirements = []
     for item in result.get("requirements", [])[:12]:
         if not isinstance(item, dict):
@@ -192,7 +199,26 @@ def parse_evidence_response(response_text: str, resume: str) -> dict:
             "needs_confirmation": bool(item.get("needs_confirmation", False)),
             "grounded": grounded,
         })
-    return {"requirements": requirements, "suggestions": suggestions}
+
+    technical_learning_notes = []
+    for item in result.get("technical_learning_notes", [])[:10]:
+        if not isinstance(item, dict):
+            continue
+        skill = str(item.get("skill", "")).strip()[:200]
+        job_quote = str(item.get("job_quote", "")).strip()[:1200]
+        if not skill or not job_quote or normalized_evidence(job_quote) not in job_source:
+            continue
+        technical_learning_notes.append({
+            "skill": skill,
+            "job_quote": job_quote,
+            "why_it_matters": str(item.get("why_it_matters", ""))[:400],
+            "practice_step": str(item.get("practice_step", ""))[:500],
+        })
+    return {
+        "requirements": requirements,
+        "suggestions": suggestions,
+        "technical_learning_notes": technical_learning_notes,
+    }
 
 
 class CareerLensHandler(BaseHTTPRequestHandler):
@@ -244,7 +270,7 @@ class CareerLensHandler(BaseHTTPRequestHandler):
                 "resume": resume,
             }
             response_text, model = call_gemini(make_prompt(normalized))
-            result = parse_evidence_response(response_text, resume)
+            result = parse_evidence_response(response_text, resume, normalized["jobDescription"])
             self.send_json(200, {**result, "model": model})
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
             self.send_json(400, {"error": str(error) or "Request must contain valid JSON."})
