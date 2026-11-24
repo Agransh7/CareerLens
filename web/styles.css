@@ -67,6 +67,10 @@ body { margin: 0; min-height: 100vh; background: var(--paper); }
 .result-heading h2 span { color: var(--orange-dark); }
 .model-used { color: #858b95; font-size: 9px; letter-spacing: 0; font-weight: 400; }
 .result-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.job-match { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 10px; margin-top: 14px; padding: 11px 13px; border: 1px solid #c8d4bd; border-radius: 5px; background: #f1f5eb; color: #475542; font-size: 12px; }
+.job-match > span { font-weight: 700; }
+.job-match a { color: #355b36; font-weight: 700; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.job-match small { flex-basis: 100%; color: #6b7766; font-size: 10px; }
 .secondary-button { padding: 9px 11px; border: 1px solid #cbc9c1; border-radius: 5px; background: white; color: var(--ink); font: 12px Arial, sans-serif; cursor: pointer; }
 .secondary-button:disabled, .download-button:disabled { border-color: #d9d6ce; background: #e9e6df; color: #848892; cursor: not-allowed; }
 .result-card { padding: 20px 22px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: #424b5a; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }

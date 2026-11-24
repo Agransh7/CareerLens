@@ -33,7 +33,7 @@
 
         <div class="optional-fields">
           <div class="field"><label for="role">ROLE <span class="optional">OPTIONAL</span></label><input id="role" name="role" type="text" maxlength="150" placeholder="e.g. Software Engineer"></div>
-          <div class="field"><label for="jobDescription">JOB DESCRIPTION <span class="optional">OPTIONAL</span></label><textarea id="jobDescription" name="jobDescription" rows="1" maxlength="6000" placeholder="Paste the job description here"></textarea></div>
+          <div class="field"><label for="jobDescription">JOB DESCRIPTION <span class="optional">OPTIONAL</span></label><textarea id="jobDescription" name="jobDescription" rows="1" maxlength="6000" placeholder="Paste one, or leave blank and we’ll find a current posting using company + role"></textarea></div>
         </div>
 
         <div class="field-label-row upload-label"><label for="resumeFile">RESUME <span class="required">*</span></label><span class="field-hint">Up to 5 MB</span></div>
@@ -46,6 +46,7 @@
 
     <section id="resultSection" class="result-section" hidden aria-live="polite">
       <div class="result-heading"><div><div class="section-kicker">EVIDENCE MODE <span id="modelUsed" class="model-used"></span></div><h2>CareerLens for <span id="resultCompany"></span></h2><p>Every suggestion needs a source in your resume. Keep only edits you can stand behind.</p></div><div class="result-actions"><button id="copyButton" class="secondary-button" type="button">Copy preview</button><button id="downloadButton" class="download-button" type="button">Download .md</button></div></div>
+      <div id="jobMatch" class="job-match" hidden><span>Current posting found:</span><a id="jobMatchLink" href="#" target="_blank" rel="noopener noreferrer"></a><small id="jobMatchSource"></small></div>
       <div class="evidence-section"><div class="subsection-heading"><h3>Role requirements</h3><p>Requirements matched against evidence in your resume.</p></div><div id="requirementMap" class="requirement-map"></div></div>
       <div class="evidence-section"><div class="subsection-heading"><h3>Experience &amp; impact</h3><p>Checks internships, jobs, projects, research, volunteering, and other experience for results, scale, and who benefited.</p></div><div id="experienceReviewList" class="experience-review-list"></div></div>
       <div class="evidence-section"><div class="subsection-heading"><h3>Suggested edits</h3><p>Add an edit to the preview only after checking its source and interview question.</p></div><div id="suggestionList" class="suggestion-list"></div></div>

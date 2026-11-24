@@ -107,6 +107,134 @@ def call_gemini(prompt: str) -> tuple[str, str]:
     raise RuntimeError(f"CareerLens tried all configured Gemini models but none succeeded:\n{summary}")
 
 
+def call_gemini_search(prompt: str) -> tuple[str, str, list[dict]]:
+    """Run a Gemini interaction grounded with Google Search and return citations."""
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key or api_key == "your_gemini_api_key_here":
+        raise RuntimeError("Gemini is not configured. Add your key to GEMINI_API_KEY in .env and restart CareerLens.")
+
+    failures: list[str] = []
+    for model in model_list():
+        payload = json.dumps({
+            "model": model,
+            "input": prompt,
+            "tools": [{"type": "google_search"}],
+        }).encode("utf-8")
+        request = Request(
+            "https://generativelanguage.googleapis.com/v1beta/interactions",
+            data=payload,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            method="POST",
+        )
+        for attempt in range(3):
+            try:
+                with urlopen(request, timeout=50) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                interaction = data.get("interaction", data)
+                texts: list[str] = []
+                citations: list[dict] = []
+                for step in interaction.get("steps", []):
+                    if step.get("type") != "model_output":
+                        continue
+                    for block in step.get("content", []):
+                        if block.get("type") != "text":
+                            continue
+                        if block.get("text"):
+                            texts.append(block["text"])
+                        for annotation in block.get("annotations", []):
+                            if annotation.get("type") == "url_citation" and annotation.get("url"):
+                                citations.append({"title": annotation.get("title", "Job source"), "url": annotation["url"]})
+                text = "\n".join(texts).strip() or str(interaction.get("output_text", "")).strip()
+                if text:
+                    # Preserve citation order while removing duplicates.
+                    unique = list({citation["url"]: citation for citation in citations}.values())
+                    return text, model, unique
+                failures.append(f"{model}: search returned no text")
+                break
+            except HTTPError as error:
+                detail = error.read().decode("utf-8", errors="replace")
+                try:
+                    parsed = json.loads(detail)
+                    detail = parsed.get("error", {}).get("message", detail)
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+                if error.code in (429, 500, 502, 503, 504) and attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                failures.append(f"{model} (HTTP {error.code}): {' '.join(str(detail).split())[:300]}")
+                break
+            except (URLError, TimeoutError, OSError) as error:
+                failures.append(f"{model}: connection failed: {error}")
+                break
+            except (json.JSONDecodeError, KeyError, TypeError) as error:
+                failures.append(f"{model}: unexpected search response: {error}")
+                break
+    raise RuntimeError("Could not search for a current job posting with Gemini:\n" + "\n".join(failures))
+
+
+def make_job_lookup_prompt(company: str, role: str) -> str:
+    return f"""Find one current job posting for the user's target company and role using Google Search.
+
+Prefer the company's official careers site or its official applicant-tracking-system posting. Choose the closest matching current opening. Do not invent a posting or use generic company hiring criteria. If several openings match, choose the closest title and seniority to the role supplied.
+
+Return only a JSON object with these fields:
+{{
+  "found": true,
+  "title": "exact current job title",
+  "source_title": "page title or publisher",
+  "source_url": "exact URL of the job posting",
+  "job_description": [
+    {{"quote": "short, exact requirement excerpt copied from the posting", "type": "technical|responsibility|qualification"}}
+  ]
+}}
+
+Include 5 to 12 short exact excerpts from the posting, prioritizing responsibilities and required/preferred technical skills. Preserve the wording exactly so the excerpts can be checked. Do not provide the entire job posting. If no current matching posting can be verified, return found=false, an empty title/url, and an empty job_description array.
+
+Company: {company}
+Requested role: {role}"""
+
+
+def parse_job_lookup(response_text: str, citations: list[dict]) -> dict:
+    cleaned = response_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+    try:
+        start = cleaned.find("{")
+        if start < 0:
+            raise json.JSONDecodeError("No JSON object found", cleaned, 0)
+        data, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Gemini search did not return a verified job posting. Paste the job description and try again.") from error
+    if not isinstance(data, dict) or not data.get("found"):
+        raise RuntimeError("I couldn't find a current matching job posting. Try a more specific role title, or paste the job description.")
+
+    title = str(data.get("title", "")).strip()[:200]
+    url = str(data.get("source_url", "")).strip()
+    excerpts = data.get("job_description", [])
+    normalize_url = lambda value: value.split("?", 1)[0].split("#", 1)[0].rstrip("/").casefold()
+    citation_urls = {normalize_url(item.get("url", "")) for item in citations}
+    if not title or not url.startswith("https://") or normalize_url(url) not in citation_urls:
+        raise RuntimeError("Gemini could not verify a citation for the job posting it found. Paste the posting or try again.")
+    if not isinstance(excerpts, list):
+        excerpts = []
+    verified_excerpts = []
+    for item in excerpts[:12]:
+        if not isinstance(item, dict):
+            continue
+        quote = str(item.get("quote", "")).strip()[:500]
+        if quote:
+            verified_excerpts.append(quote)
+    if len(verified_excerpts) < 3:
+        raise RuntimeError("The job posting did not provide enough readable requirements. Paste the job description and try again.")
+    return {
+        "title": title,
+        "source_title": str(data.get("source_title", "Job posting"))[:200],
+        "source_url": url,
+        "job_description": "\n".join(f"- {quote}" for quote in verified_excerpts),
+        "citations": citations,
+    }
+
+
 def make_prompt(data: dict) -> str:
     job_description = data.get("jobDescription") or "Not provided"
     role = data.get("role") or "Not provided"
@@ -147,7 +275,9 @@ Rules:
 
 Company: {data['company']}
 Target role: {role}
-Job description: {job_description}
+Selected job posting: {data.get('jobTitle') or 'Provided by user'}
+Posting URL: {data.get('jobSourceURL') or 'Not provided'}
+Job description and verified requirement excerpts: {job_description}
 
 Resume text:
 {data['resume']}"""
@@ -305,9 +435,16 @@ class CareerLensHandler(BaseHTTPRequestHandler):
                 "jobDescription": job_description,
                 "resume": resume,
             }
+            job_posting = None
+            if not job_description:
+                lookup_text, lookup_model, citations = call_gemini_search(make_job_lookup_prompt(company, role))
+                job_posting = parse_job_lookup(lookup_text, citations)
+                normalized["jobDescription"] = job_posting["job_description"]
+                normalized["jobSourceURL"] = job_posting["source_url"]
+                normalized["jobTitle"] = job_posting["title"]
             response_text, model = call_gemini(make_prompt(normalized))
             result = parse_evidence_response(response_text, resume, normalized["jobDescription"])
-            self.send_json(200, {**result, "model": model})
+            self.send_json(200, {**result, "model": model, "job_posting": job_posting})
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
             self.send_json(400, {"error": str(error) or "Request must contain valid JSON."})
         except RuntimeError as error:

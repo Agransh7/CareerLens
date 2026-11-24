@@ -301,9 +301,19 @@ form.addEventListener('submit', async (event) => {
     renderRequirements(result.requirements || []);
     renderExperienceReviews(result.experience_reviews || []);
     renderSuggestions(result.suggestions || []);
-    renderTechnicalLearningNotes(result.technical_learning_notes || [], document.querySelector('#jobDescription').value);
+    const effectiveJobDescription = result.job_posting?.job_description || document.querySelector('#jobDescription').value;
+    renderTechnicalLearningNotes(result.technical_learning_notes || [], effectiveJobDescription);
     document.querySelector('#resultCompany').textContent = companyInput.value.trim();
     document.querySelector('#modelUsed').textContent = result.model ? ` · ${result.model}` : '';
+    const jobMatch = document.querySelector('#jobMatch');
+    if (result.job_posting) {
+      document.querySelector('#jobMatchLink').href = result.job_posting.source_url;
+      document.querySelector('#jobMatchLink').textContent = result.job_posting.title;
+      document.querySelector('#jobMatchSource').textContent = `Source: ${result.job_posting.source_title}`;
+      jobMatch.hidden = false;
+    } else {
+      jobMatch.hidden = true;
+    }
     resultSection.hidden = false;
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {
