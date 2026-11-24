@@ -9,9 +9,10 @@ const dropzone = document.querySelector('#dropzone');
 const errorMessage = document.querySelector('#errorMessage');
 const submitButton = document.querySelector('#submitButton');
 const resultSection = document.querySelector('#resultSection');
-const resultText = document.querySelector('#resultText');
 let selectedFile = null;
 let generatedMarkdown = '';
+let originalResumeText = '';
+let currentSuggestions = [];
 
 for (const chip of document.querySelectorAll('.company-chip')) {
   chip.addEventListener('click', () => {
@@ -25,7 +26,7 @@ function setFile(file) {
   selectedFile = file || null;
   if (!selectedFile) {
     fileLabel.innerHTML = 'Drop your resume here, or <span>browse</span>';
-    fileMeta.textContent = 'Your details stay on this device except for the text sent to Gemini.';
+    fileMeta.textContent = 'PDF, DOCX, or TXT';
     return;
   }
   fileLabel.textContent = selectedFile.name;
@@ -68,28 +69,119 @@ async function readResume(file) {
   throw new Error('Please choose a PDF, DOCX, or TXT file.');
 }
 
-function inlineMarkdown(value) {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>').replace(/`([^`]+)`/g, '<code>$1</code>');
+function escapeHtml(value) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-function renderMarkdown(markdown) {
-  const lines = markdown.split(/\r?\n/);
-  const output = [];
-  let inList = false;
-  for (const line of lines) {
-    const heading = line.match(/^(#{1,3})\s+(.+)/);
-    const list = line.match(/^\s*[-*]\s+(.+)/);
-    if (list) {
-      if (!inList) { output.push('<ul>'); inList = true; }
-      output.push(`<li>${inlineMarkdown(list[1])}</li>`);
-      continue;
-    }
-    if (inList) { output.push('</ul>'); inList = false; }
-    if (heading) output.push(`<h${heading[1].length}>${inlineMarkdown(heading[2])}</h${heading[1].length}>`);
-    else if (line.trim()) output.push(`<p>${inlineMarkdown(line)}</p>`);
+function renderRequirements(requirements) {
+  const container = document.querySelector('#requirementMap');
+  container.replaceChildren();
+  if (!requirements.length) {
+    container.innerHTML = '<p class="empty-state">No clear requirements were found. Add a job description and try again.</p>';
+    return;
   }
-  if (inList) output.push('</ul>');
-  return output.join('');
+  for (const item of requirements) {
+    const card = document.createElement('article');
+    card.className = `requirement-card status-${item.status}`;
+    const statusLabel = item.status === 'covered' ? 'Evidence found' : item.status === 'partial' ? 'Some evidence' : item.status === 'unverified' ? 'Quote not verified' : 'Gap';
+    card.innerHTML = `<div class="requirement-top"><h4>${escapeHtml(item.requirement)}</h4><span class="status-badge">${statusLabel}</span></div><p>${escapeHtml(item.reason || '')}</p>`;
+    if (item.evidence_quote) {
+      const quoteLabel = document.createElement('div');
+      quoteLabel.className = 'evidence-label';
+      quoteLabel.textContent = item.grounded ? 'RESUME EVIDENCE' : 'UNVERIFIED QUOTE';
+      const quote = document.createElement('blockquote');
+      quote.textContent = item.evidence_quote;
+      card.append(quoteLabel, quote);
+    }
+    container.append(card);
+  }
+}
+
+function renderSuggestions(suggestions) {
+  const container = document.querySelector('#suggestionList');
+  container.replaceChildren();
+  currentSuggestions = suggestions.map((item) => ({ ...item, included: false }));
+  if (!currentSuggestions.length) {
+    container.innerHTML = '<p class="empty-state">No resume lines could be matched safely to these requirements. You can still use the evidence gaps above to guide what to add.</p>';
+    updatePreview();
+    return;
+  }
+  currentSuggestions.forEach((item, index) => {
+    const card = document.createElement('article');
+    card.className = `suggestion-card ${item.grounded ? '' : 'unverified'}`;
+    const title = document.createElement('div');
+    title.className = 'suggestion-title';
+    title.innerHTML = `<span class="suggestion-index">${String(index + 1).padStart(2, '0')}</span><h4>${escapeHtml(item.requirement)}</h4>`;
+    card.append(title);
+
+    const evidenceLabel = document.createElement('div');
+    evidenceLabel.className = 'evidence-label';
+    evidenceLabel.textContent = item.grounded ? 'FROM YOUR RESUME' : 'SOURCE QUOTE NOT FOUND';
+    const source = document.createElement('blockquote');
+    source.className = 'source-quote';
+    source.textContent = item.source_quote || 'No source quote was provided.';
+    const rewriteLabel = document.createElement('label');
+    rewriteLabel.className = 'evidence-label rewrite-label';
+    rewriteLabel.textContent = 'SUGGESTED REWRITE';
+    const rewrite = document.createElement('textarea');
+    rewrite.className = 'rewrite-input';
+    rewrite.rows = 3;
+    rewrite.maxLength = 1500;
+    rewrite.value = item.rewrite;
+    rewrite.disabled = !item.grounded;
+    rewrite.addEventListener('input', () => { item.rewrite = rewrite.value; updatePreview(); });
+    const reason = document.createElement('p');
+    reason.className = 'suggestion-reason';
+    reason.textContent = item.reason;
+    const interview = document.createElement('div');
+    interview.className = 'interview-check';
+    interview.innerHTML = `<strong>Interview check</strong><p>${escapeHtml(item.interview_question)}</p>`;
+    const confirmLabel = document.createElement('label');
+    confirmLabel.className = 'confirm-label';
+    const confirm = document.createElement('input');
+    confirm.type = 'checkbox';
+    confirm.checked = item.needs_confirmation;
+    confirm.addEventListener('change', () => { item.needs_confirmation = confirm.checked; updatePreview(); });
+    confirmLabel.append(confirm, document.createTextNode(' I still need to confirm this detail'));
+    const addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.className = 'keep-button';
+    addButton.disabled = !item.grounded;
+    addButton.textContent = 'Add to preview';
+    addButton.addEventListener('click', () => {
+      item.included = !item.included;
+      addButton.textContent = item.included ? 'Remove from preview' : 'Add to preview';
+      addButton.classList.toggle('included', item.included);
+      updatePreview();
+    });
+    card.append(evidenceLabel, source, rewriteLabel, rewrite, reason, interview, confirmLabel, addButton);
+    container.append(card);
+  });
+  updatePreview();
+}
+
+function replaceSourceExcerpt(text, quote, replacement) {
+  if (!quote.trim()) return text;
+  const pattern = quote.trim().split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+  return text.replace(new RegExp(pattern, 'i'), replacement);
+}
+
+function updatePreview() {
+  let preview = originalResumeText;
+  for (const item of currentSuggestions) {
+    if (item.included && item.grounded) preview = replaceSourceExcerpt(preview, item.source_quote, item.rewrite);
+  }
+  generatedMarkdown = preview;
+  const previewElement = document.querySelector('#resumePreview');
+  if (previewElement) previewElement.textContent = preview || 'Your resume preview will appear here.';
+  const accepted = currentSuggestions.filter((item) => item.included && item.grounded).length;
+  const warning = currentSuggestions.filter((item) => item.included && item.needs_confirmation).length;
+  const status = document.querySelector('#previewStatus');
+  if (status) status.textContent = warning
+    ? `${accepted} suggestion${accepted === 1 ? '' : 's'} added · confirm ${warning} detail${warning === 1 ? '' : 's'} before copying or downloading.`
+    : `${accepted} suggestion${accepted === 1 ? '' : 's'} added.`;
+  document.querySelector('#copyButton').disabled = warning > 0;
+  document.querySelector('#downloadButton').disabled = warning > 0;
 }
 
 form.addEventListener('submit', async (event) => {
@@ -97,19 +189,21 @@ form.addEventListener('submit', async (event) => {
   errorMessage.hidden = true;
   if (!companyInput.value.trim()) { errorMessage.textContent = 'Add the company you are applying to.'; errorMessage.hidden = false; companyInput.focus(); return; }
   if (!selectedFile) { errorMessage.textContent = 'Upload a resume to get started.'; errorMessage.hidden = false; return; }
+  if (!document.querySelector('#role').value.trim() && !document.querySelector('#jobDescription').value.trim()) { errorMessage.textContent = 'Add a target role or job description to build a useful evidence map.'; errorMessage.hidden = false; document.querySelector('#role').focus(); return; }
   if (selectedFile.size > 5 * 1024 * 1024) { errorMessage.textContent = 'This file is over 5 MB. Choose a smaller resume file.'; errorMessage.hidden = false; return; }
   submitButton.disabled = true;
   submitButton.querySelector('span').textContent = 'Reading your resume…';
   try {
-    const resume = (await readResume(selectedFile)).trim();
-    if (resume.length < 40) throw new Error('There is not enough readable text in this file. Please check the file and try again.');
+    originalResumeText = (await readResume(selectedFile)).trim();
+    if (originalResumeText.length < 40) throw new Error('There is not enough readable text in this file. Please check the file and try again.');
     submitButton.querySelector('span').textContent = 'Finding the right words…';
-    const response = await fetch('/api/tailor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company: companyInput.value.trim(), role: document.querySelector('#role').value.trim(), jobDescription: document.querySelector('#jobDescription').value.trim(), resume }) });
+    const response = await fetch('/api/tailor', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ company: companyInput.value.trim(), role: document.querySelector('#role').value.trim(), jobDescription: document.querySelector('#jobDescription').value.trim(), resume: originalResumeText }) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not tailor the resume. Please try again.');
-    generatedMarkdown = result.resume;
-    resultText.innerHTML = renderMarkdown(generatedMarkdown);
+    renderRequirements(result.requirements || []);
+    renderSuggestions(result.suggestions || []);
     document.querySelector('#resultCompany').textContent = companyInput.value.trim();
+    document.querySelector('#modelUsed').textContent = result.model ? ` · ${result.model}` : '';
     resultSection.hidden = false;
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (error) {

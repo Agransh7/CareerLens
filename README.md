@@ -24,7 +24,10 @@ In VS Code, run **Ctrl+Shift+P → Tasks: Run Task → CareerLens: commit and pu
 
 - Upload a PDF, DOCX, or TXT resume; browser-side text extraction keeps files local.
 - Optionally enter a target role and job description.
-- Review, copy, or download the generated Markdown draft.
+- Evidence Mode maps role requirements to exact resume excerpts and proposes edits that preserve their source quote.
+- Review, edit, add, or remove suggestions; unverified quotes cannot be applied to the preview.
+- Each suggestion includes an interview question. Suggestions flagged for confirmation must be cleared before copying or downloading.
+- Copy or download the updated resume preview as Markdown.
 - Resume text is sent to Gemini only when you submit. CareerLens does not save the file or request.
 - PDF reading uses PDF.js from a CDN. Scanned PDFs need OCR, which this starter does not include.
 

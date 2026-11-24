@@ -15,7 +15,7 @@
 
   <main class="shell">
     <section class="intro">
-      <div class="eyebrow">A STUDENT PROJECT</div>
+      <div class="eyebrow">Career Lens</div>
       <h1>Tailor your resume<br>for the job you want.</h1>
       <p>Add your resume and pick a company. CareerLens will help you make a focused first draft.</p>
     </section>
@@ -45,8 +45,10 @@
     </section>
 
     <section id="resultSection" class="result-section" hidden aria-live="polite">
-      <div class="result-heading"><div><div class="section-kicker">YOUR DRAFT</div><h2>Made for <span id="resultCompany"></span></h2><p>Check the details and make it your own.</p></div><div class="result-actions"><button id="copyButton" class="secondary-button" type="button">Copy text</button><button id="downloadButton" class="download-button" type="button">Download .md</button></div></div>
-      <article id="resultText" class="result-card"></article>
+      <div class="result-heading"><div><div class="section-kicker">EVIDENCE MODE <span id="modelUsed" class="model-used"></span></div><h2>CareerLens for <span id="resultCompany"></span></h2><p>Every suggestion needs a source in your resume. Keep only edits you can stand behind.</p></div><div class="result-actions"><button id="copyButton" class="secondary-button" type="button">Copy preview</button><button id="downloadButton" class="download-button" type="button">Download .md</button></div></div>
+      <div class="evidence-section"><div class="subsection-heading"><h3>Role requirements</h3><p>Requirements matched against evidence in your resume.</p></div><div id="requirementMap" class="requirement-map"></div></div>
+      <div class="evidence-section"><div class="subsection-heading"><h3>Suggested edits</h3><p>Add an edit to the preview only after checking its source and interview question.</p></div><div id="suggestionList" class="suggestion-list"></div></div>
+      <div class="preview-section"><div class="subsection-heading"><h3>Resume preview</h3><p id="previewStatus">Your original resume text is shown below. Add edits to update it.</p></div><pre id="resumePreview" class="resume-preview"></pre></div>
     </section>
 
     <footer class="page-footer"><span>made by Agransh and Ayaan</span><span>JUIT Solan</span></footer>

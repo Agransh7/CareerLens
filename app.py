@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
+import unicodedata
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -52,7 +54,11 @@ def call_gemini(prompt: str) -> tuple[str, str]:
     payload = json.dumps(
         {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.35, "maxOutputTokens": 8192},
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 10000,
+                "responseMimeType": "application/json",
+            },
         }
     ).encode("utf-8")
     failures: list[str] = []
@@ -102,17 +108,91 @@ def call_gemini(prompt: str) -> tuple[str, str]:
 
 
 def make_prompt(data: dict) -> str:
-    return (
-        "You are an expert resume editor. Tailor this resume for the target company and role. "
-        "Preserve truth; never invent employers, dates, degrees, skills, metrics, or achievements. "
-        "Rephrase and reorganize only provided facts. Return a polished ATS-readable resume in Markdown, "
-        "followed by a section titled 'Tailoring notes' with edits and details the candidate should verify. "
-        "Do not claim access to private company hiring criteria.\n\n"
-        f"Company: {data['company']}\n"
-        f"Role: {data.get('role') or 'Not specified'}\n"
-        f"Job description: {data.get('jobDescription') or 'Not provided'}\n\n"
-        f"Resume:\n{data['resume']}"
-    )
+    job_description = data.get("jobDescription") or "Not provided"
+    role = data.get("role") or "Not provided"
+    return f"""You are CareerLens Evidence Mode, a careful resume editor. Analyze the candidate's resume against the supplied job description and role.
+
+Return only a JSON object with exactly these top-level arrays:
+{{
+  "requirements": [
+    {{"requirement": "short requirement", "status": "covered|partial|gap", "evidence_quote": "verbatim resume excerpt or empty string", "reason": "brief explanation"}}
+  ],
+  "suggestions": [
+    {{"requirement": "one requirement above", "source_quote": "verbatim complete resume bullet or line", "rewrite": "revised bullet using only supported facts", "reason": "why this wording fits the requirement", "interview_question": "a question the candidate should be ready to answer", "needs_confirmation": false}}
+  ]
+}}
+
+Rules:
+- Never invent employers, dates, degrees, skills, metrics, or accomplishments.
+- Every non-gap requirement must cite an exact, contiguous excerpt from the resume in evidence_quote. If there is no evidence, use status "gap" and an empty evidence_quote.
+- Every suggestion must cite one exact, contiguous, complete bullet or line from the resume in source_quote. Do not cite a paraphrase. If no existing line can support a rewrite, do not create a suggestion for it.
+- Keep each rewrite truthful and directly traceable to its source_quote. Do not add claims that cannot be defended from that quote.
+- Set needs_confirmation to true when a rewrite depends on an ambiguous detail or would benefit from the candidate checking accuracy.
+- Make 3 to 8 concise requirements when a job description is supplied. If no job description is supplied, label requirements as role-based in their wording and do not imply access to private company criteria.
+- Return at most 8 suggestions. Use an empty suggestions array when the resume contains no supporting evidence.
+
+Company: {data['company']}
+Target role: {role}
+Job description: {job_description}
+
+Resume text:
+{data['resume']}"""
+
+
+def normalized_evidence(value: str) -> str:
+    value = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(value.split())
+
+
+def parse_evidence_response(response_text: str, resume: str) -> dict:
+    cleaned = response_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.IGNORECASE)
+    try:
+        result = json.loads(cleaned)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Gemini did not return the evidence data in the expected JSON format. Please try again.") from error
+    if not isinstance(result, dict):
+        raise RuntimeError("Gemini returned evidence data in an unexpected format. Please try again.")
+
+    source = normalized_evidence(resume)
+    requirements = []
+    for item in result.get("requirements", [])[:12]:
+        if not isinstance(item, dict):
+            continue
+        quote = str(item.get("evidence_quote", "")).strip()[:1500]
+        stated_status = str(item.get("status", "gap")).lower()
+        grounded = bool(quote) and normalized_evidence(quote) in source
+        status = stated_status if stated_status in {"covered", "partial", "gap"} else "gap"
+        if status != "gap" and not grounded:
+            status = "unverified"
+        requirements.append({
+            "requirement": str(item.get("requirement", "Role requirement"))[:300],
+            "status": status,
+            "evidence_quote": quote,
+            "reason": str(item.get("reason", ""))[:500],
+            "grounded": grounded,
+        })
+
+    suggestions = []
+    for item in result.get("suggestions", [])[:8]:
+        if not isinstance(item, dict):
+            continue
+        quote = str(item.get("source_quote", "")).strip()[:1500]
+        grounded = bool(quote) and normalized_evidence(quote) in source
+        rewrite = str(item.get("rewrite", "")).strip()[:1500]
+        if not rewrite:
+            continue
+        suggestions.append({
+            "requirement": str(item.get("requirement", "Role requirement"))[:300],
+            "source_quote": quote,
+            "rewrite": rewrite,
+            "reason": str(item.get("reason", ""))[:500],
+            "interview_question": str(item.get("interview_question", "How would you explain this experience in an interview?"))[:500],
+            "needs_confirmation": bool(item.get("needs_confirmation", False)),
+            "grounded": grounded,
+        })
+    return {"requirements": requirements, "suggestions": suggestions}
 
 
 class CareerLensHandler(BaseHTTPRequestHandler):
@@ -146,20 +226,26 @@ class CareerLensHandler(BaseHTTPRequestHandler):
                 raise ValueError("Request body must be a JSON object.")
             company = str(data.get("company", "")).strip()[:100]
             resume = str(data.get("resume", "")).strip()
+            role = str(data.get("role", "")).strip()[:150]
+            job_description = str(data.get("jobDescription", "")).strip()[:6000]
             if not company or not resume:
                 self.send_json(400, {"error": "Add a target company and resume text."})
+                return
+            if not role and not job_description:
+                self.send_json(400, {"error": "Add a target role or job description so CareerLens can build a meaningful evidence map."})
                 return
             if len(resume) > MAX_RESUME:
                 self.send_json(413, {"error": "Resume text is too long. Keep it under 50,000 characters."})
                 return
             normalized = {
                 "company": company,
-                "role": str(data.get("role", "")).strip()[:150],
-                "jobDescription": str(data.get("jobDescription", "")).strip()[:6000],
+                "role": role,
+                "jobDescription": job_description,
                 "resume": resume,
             }
-            result, model = call_gemini(make_prompt(normalized))
-            self.send_json(200, {"resume": result, "model": model})
+            response_text, model = call_gemini(make_prompt(normalized))
+            result = parse_evidence_response(response_text, resume)
+            self.send_json(200, {**result, "model": model})
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
             self.send_json(400, {"error": str(error) or "Request must contain valid JSON."})
         except RuntimeError as error:
