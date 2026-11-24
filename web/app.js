@@ -135,7 +135,3 @@ document.querySelector('#copyButton').addEventListener('click', async (event) =>
   setTimeout(() => { event.currentTarget.textContent = 'Copy text'; }, 1600);
 });
 
-const infoDialog = document.querySelector('#infoDialog');
-document.querySelector('#privacyInfo').addEventListener('click', () => infoDialog.showModal());
-document.querySelector('#helpButton').addEventListener('click', () => infoDialog.showModal());
-document.querySelector('#closeDialog').addEventListener('click', () => infoDialog.close());
