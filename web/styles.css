@@ -132,6 +132,12 @@ body { margin: 0; min-height: 100vh; background: var(--paper); }
 .keep-button:hover, .keep-button.included { background: var(--orange); color: white; }
 .keep-button:disabled { border-color: #cbc9c1; color: #8b8f94; background: #f2efeb; cursor: not-allowed; }
 .resume-preview { max-height: 520px; overflow: auto; margin: 0; padding: 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: #414a58; font: 12px/1.6 Consolas, "Courier New", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+.email-section { margin-top: 21px; padding: 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.email-compose-row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.email-compose-row label { color: #394255; font-size: 10px; font-weight: 700; letter-spacing: .65px; }
+.email-compose-row input { flex: 1 1 210px; min-width: 0; min-height: 37px; padding: 9px 10px; border: 1px solid #d6d3cb; border-radius: 5px; background: white; color: var(--ink); font: 12px Arial, sans-serif; }
+.email-compose-row input:focus { border-color: var(--orange); outline: 2px solid #f9e2d8; }
+.email-draft-status { min-height: 15px; margin: 8px 0 0; color: #626b79; font-size: 11px; }
 .empty-state { padding: 12px; border: 1px dashed #cbc9c1; border-radius: 5px; color: #687181; background: #fcfaf5; font-size: 12px; line-height: 1.5; }
 .learning-panel { margin-top: 21px; padding: 15px; border: 1px solid #dfc99f; border-radius: 6px; background: #fff9e9; }
 .learning-panel .subsection-heading h3 { color: #625127; }

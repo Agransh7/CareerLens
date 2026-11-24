@@ -31,6 +31,7 @@ In VS Code, run **Ctrl+Shift+P → Tasks: Run Task → CareerLens: commit and pu
 - Review, edit, add, or remove suggestions; unverified quotes cannot be applied to the preview.
 - Each suggestion includes an interview question. Suggestions flagged for confirmation must be cleared before copying or downloading.
 - Copy or download the updated resume preview as Markdown.
+- Open a prefilled Gmail draft addressed to the recruiter or company email you enter, with the generated resume in the email body. Review and send it from Gmail. Direct automatic sending requires a Google OAuth setup, which this project does not include.
 - Resume text is sent to Gemini only when you submit. CareerLens does not save the file or request.
 - PDF reading uses PDF.js from a CDN. Scanned PDFs need OCR, which this starter does not include.
 

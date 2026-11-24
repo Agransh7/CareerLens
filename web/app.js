@@ -334,6 +334,27 @@ document.querySelector('#downloadButton').addEventListener('click', () => {
   link.click();
   URL.revokeObjectURL(link.href);
 });
+document.querySelector('#openGmailDraft').addEventListener('click', () => {
+  const recipient = document.querySelector('#companyEmail');
+  const status = document.querySelector('#emailDraftStatus');
+  status.textContent = '';
+  if (!generatedMarkdown.trim()) {
+    status.textContent = 'Generate your resume preview before opening an email draft.';
+    return;
+  }
+  if (!recipient.value.trim() || !recipient.checkValidity()) {
+    status.textContent = 'Enter a valid recruiter or company email address.';
+    recipient.focus();
+    return;
+  }
+  const role = document.querySelector('#role').value.trim();
+  const company = companyInput.value.trim();
+  const subject = `Application${role ? `: ${role}` : ''} at ${company}`;
+  const body = `Hello,\n\nI am applying${role ? ` for the ${role} role` : ''} at ${company}. Please find my resume below.\n\n${generatedMarkdown}\n\nRegards,\n${generatedMarkdown.split(/\r?\n/).find((line) => line.trim()) || ''}`;
+  const params = new URLSearchParams({ view: 'cm', fs: '1', to: recipient.value.trim(), su: subject, body });
+  window.open(`https://mail.google.com/mail/?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  status.textContent = 'Gmail draft opened. Review the message and press Send in Gmail.';
+});
 document.querySelector('#copyButton').addEventListener('click', async (event) => {
   await navigator.clipboard.writeText(generatedMarkdown);
   event.currentTarget.textContent = 'Copied';
