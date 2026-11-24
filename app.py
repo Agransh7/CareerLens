@@ -192,7 +192,7 @@ Return only a JSON object with exactly these top-level arrays:
     {{"experience_type": "work|internship|project|research|volunteering|leadership|other", "source_quote": "verbatim complete resume entry or bullet", "effect_quote": "verbatim result/effect excerpt or empty string", "scale_quote": "verbatim measurement or scale excerpt, including a number only if stated, or empty string", "beneficiary_quote": "verbatim excerpt showing who benefited, or empty string", "impact_summary": "short summary supported by these excerpts, or empty string", "follow_up_question": "ask about the missing real outcome, scale, or beneficiary; never suggest a fabricated number"}}
   ],
   "technical_learning_notes": [
-    {{"skill": "technical skill/tool required by the posting", "job_quote": "verbatim excerpt from the job description", "why_it_matters": "brief reason this skill is relevant", "practice_step": "a small project or study task to build it"}}
+    {{"skill": "technical skill/tool relevant to the role", "job_quote": "verbatim excerpt from job description, or empty when no posting was found", "source_label": "Job description or role-based estimate", "why_it_matters": "brief reason this skill is relevant", "practice_step": "a small project or study task to build it"}}
   ]
 }}
 
@@ -209,9 +209,9 @@ Rules:
 - Return at most 20 experience_reviews. If the resume contains no identifiable experience entries, use an empty array.
 - Make 3 to 8 concise requirements when a job description is supplied. If no job description is supplied, label requirements as role-based in their wording and do not imply access to private company criteria.
 - Return at most 8 suggestions. Use an empty suggestions array when the resume contains no supporting evidence.
-- technical_learning_notes must list only explicit technical skills, tools, frameworks, or platforms in the supplied job description that are not evidenced anywhere in the resume. Do not infer that the candidate lacks a skill merely because the resume omits it; describe these as "not shown in this resume" study candidates.
-- Each technical learning note must include a verbatim job_quote from the supplied job description. Do not include guessed company requirements, generic soft skills, or requirements already clearly evidenced in the resume.
-- If no job description was supplied, return an empty technical_learning_notes array.
+- When a job description is supplied, technical_learning_notes must list technical skills, tools, frameworks, or platforms explicitly required or preferred there that are not mentioned anywhere in the resume. Treat each unmentioned skill as a learning requirement for this candidate; do not hedge that the candidate might already know it. Include a verbatim job_quote and set source_label to "From the job description".
+- When no job description was found or supplied, infer 3 to 8 common technical skills/tools for the target role (not company-specific criteria). If a skill is not mentioned anywhere in the resume, include it as a learning requirement and set source_label to "Typical role requirement; no exact posting found". Leave job_quote empty in this case.
+- Do not include generic soft skills. Consider equivalent skill names and resume context before treating a technical skill as missing.
 
 Company: {data['company']}
 Target role: {role}
@@ -311,11 +311,16 @@ def parse_evidence_response(response_text: str, resume: str, job_description: st
             continue
         skill = str(item.get("skill", "")).strip()[:200]
         job_quote = str(item.get("job_quote", "")).strip()[:1200]
-        if not skill or not job_quote or normalized_evidence(job_quote) not in job_source:
+        if not skill:
             continue
+        if job_source and (not job_quote or normalized_evidence(job_quote) not in job_source):
+            continue
+        if not job_source:
+            job_quote = ""
         technical_learning_notes.append({
             "skill": skill,
             "job_quote": job_quote,
+            "source_label": str(item.get("source_label", "From the job description" if job_source else "Typical role requirement; no exact posting found"))[:160],
             "why_it_matters": str(item.get("why_it_matters", ""))[:400],
             "practice_step": str(item.get("practice_step", ""))[:500],
         })
@@ -376,22 +381,15 @@ class CareerLensHandler(BaseHTTPRequestHandler):
                 "resume": resume,
             }
             job_posting = None
-            job_context = None
             if not job_description:
                 job_posting = find_public_job_listing(company, role)
                 if job_posting:
                     normalized["jobDescription"] = job_posting["job_description"]
                     normalized["jobSourceURL"] = job_posting["source_url"]
                     normalized["jobTitle"] = job_posting["title"]
-                else:
-                    job_context = {
-                        "kind": "benchmark",
-                        "title": f"{role} role benchmark",
-                        "source_title": "No exact public listing found. Requirements are role-based, not company-specific.",
-                    }
             response_text, model = call_gemini(make_prompt(normalized))
             result = parse_evidence_response(response_text, resume, normalized["jobDescription"])
-            self.send_json(200, {**result, "model": model, "job_posting": job_posting, "job_context": job_context})
+            self.send_json(200, {**result, "model": model, "job_posting": job_posting})
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
             self.send_json(400, {"error": str(error) or "Request must contain valid JSON."})
         except RuntimeError as error:

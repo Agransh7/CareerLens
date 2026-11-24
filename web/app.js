@@ -222,10 +222,8 @@ function renderSuggestions(suggestions) {
 function renderTechnicalLearningNotes(notes, jobDescription) {
   const container = document.querySelector('#technicalGapList');
   container.replaceChildren();
-  if (!jobDescription.trim()) {
-    container.innerHTML = '<p class="empty-state">Add the job description to identify its explicit technical requirements. A company name or role title alone is not enough to claim a skill gap.</p>';
-  } else if (!notes.length) {
-    container.innerHTML = '<p class="empty-state">No explicit technical requirements missing from the resume were verified in this posting.</p>';
+  if (!notes.length) {
+    container.innerHTML = '<p class="empty-state">No technical learning requirements were identified for this role.</p>';
   } else {
     for (const item of notes) {
       const card = document.createElement('article');
@@ -234,9 +232,9 @@ function renderTechnicalLearningNotes(notes, jobDescription) {
       skill.textContent = item.skill;
       const quoteLabel = document.createElement('div');
       quoteLabel.className = 'evidence-label';
-      quoteLabel.textContent = 'FROM THE JOB DESCRIPTION';
+      quoteLabel.textContent = item.source_label || (jobDescription.trim() ? 'FROM THE JOB DESCRIPTION' : 'ROLE-BASED REQUIREMENT');
       const quote = document.createElement('blockquote');
-      quote.textContent = item.job_quote;
+      quote.textContent = item.job_quote || 'This technical skill is not mentioned in the resume and has been added as a learning requirement.';
       const reason = document.createElement('p');
       reason.textContent = item.why_it_matters;
       const practice = document.createElement('p');
@@ -306,19 +304,13 @@ form.addEventListener('submit', async (event) => {
     document.querySelector('#resultCompany').textContent = companyInput.value.trim();
     document.querySelector('#modelUsed').textContent = result.model ? ` · ${result.model}` : '';
     const jobMatch = document.querySelector('#jobMatch');
-    const jobContext = result.job_posting || result.job_context;
-    if (jobContext) {
+    if (result.job_posting) {
       const jobMatchLink = document.querySelector('#jobMatchLink');
-      document.querySelector('#jobMatchLabel').textContent = result.job_posting ? 'Matching public listing:' : 'Role context:';
-      jobMatchLink.textContent = jobContext.title;
-      jobMatchLink.hidden = !result.job_posting;
-      if (result.job_posting) {
-        jobMatchLink.href = result.job_posting.source_url;
-        document.querySelector('#jobMatchSource').textContent = `Source: ${result.job_posting.source_title}`;
-      } else {
-        jobMatchLink.removeAttribute('href');
-        document.querySelector('#jobMatchSource').textContent = jobContext.source_title;
-      }
+      document.querySelector('#jobMatchLabel').textContent = 'Matching public listing:';
+      jobMatchLink.textContent = result.job_posting.title;
+      jobMatchLink.href = result.job_posting.source_url;
+      jobMatchLink.hidden = false;
+      document.querySelector('#jobMatchSource').textContent = `Source: ${result.job_posting.source_title}`;
       jobMatch.hidden = false;
     } else {
       jobMatch.hidden = true;
