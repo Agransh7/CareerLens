@@ -98,6 +98,64 @@ function renderRequirements(requirements) {
   }
 }
 
+function renderExperienceReviews(reviews) {
+  const container = document.querySelector('#experienceReviewList');
+  container.replaceChildren();
+  if (!reviews.length) {
+    container.innerHTML = '<p class="empty-state">No work, internship, project, research, or similar experience entry could be verified in the resume.</p>';
+    return;
+  }
+  for (const item of reviews) {
+    const dimensions = item.impact_dimensions || {};
+    const completeImpact = ['effect', 'scale', 'beneficiary'].every((key) => dimensions[key]?.grounded);
+    const anyImpact = ['effect', 'scale', 'beneficiary'].some((key) => dimensions[key]?.grounded);
+    const card = document.createElement('article');
+    card.className = `experience-review-card ${completeImpact ? 'impact-found' : 'impact-missing'}`;
+    const header = document.createElement('div');
+    header.className = 'experience-review-header';
+    const type = document.createElement('span');
+    type.className = 'experience-type';
+    type.textContent = item.experience_type;
+    const status = document.createElement('span');
+    status.className = 'impact-status';
+    status.textContent = completeImpact ? 'Impact well described' : anyImpact ? 'Add impact detail' : 'Add the result';
+    header.append(type, status);
+    const sourceLabel = document.createElement('div');
+    sourceLabel.className = 'evidence-label';
+    sourceLabel.textContent = 'EXPERIENCE FROM YOUR RESUME';
+    const source = document.createElement('blockquote');
+    source.textContent = item.source_quote;
+    card.append(header, sourceLabel, source);
+    const dimensionList = document.createElement('div');
+    dimensionList.className = 'impact-dimensions';
+    const dimensionLabels = { effect: 'Effect', scale: 'Scale / how much', beneficiary: 'Who benefited' };
+    for (const [key, label] of Object.entries(dimensionLabels)) {
+      const row = document.createElement('div');
+      row.className = `impact-dimension ${dimensions[key]?.grounded ? 'present' : 'missing'}`;
+      const name = document.createElement('strong');
+      name.textContent = label;
+      const evidence = document.createElement('span');
+      evidence.textContent = dimensions[key]?.grounded ? dimensions[key].quote : 'Not stated in this resume entry';
+      row.append(name, evidence);
+      dimensionList.append(row);
+    }
+    card.append(dimensionList);
+    if (item.impact_summary) {
+      const summary = document.createElement('p');
+      summary.className = 'impact-summary';
+      summary.textContent = item.impact_summary;
+      card.append(summary);
+    }
+    if (!completeImpact) {
+      const question = document.createElement('div');
+      question.className = 'impact-question';
+      question.innerHTML = `<strong>Ask yourself</strong><p>${escapeHtml(item.follow_up_question)}</p>`;
+      card.append(question);
+    }
+    container.append(card);
+  }
+}
+
 function renderSuggestions(suggestions) {
   const container = document.querySelector('#suggestionList');
   container.replaceChildren();
@@ -241,6 +299,7 @@ form.addEventListener('submit', async (event) => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not tailor the resume. Please try again.');
     renderRequirements(result.requirements || []);
+    renderExperienceReviews(result.experience_reviews || []);
     renderSuggestions(result.suggestions || []);
     renderTechnicalLearningNotes(result.technical_learning_notes || [], document.querySelector('#jobDescription').value);
     document.querySelector('#resultCompany').textContent = companyInput.value.trim();

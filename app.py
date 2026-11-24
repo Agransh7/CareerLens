@@ -120,6 +120,9 @@ Return only a JSON object with exactly these top-level arrays:
   "suggestions": [
     {{"requirement": "one requirement above", "source_quote": "verbatim complete resume bullet or line", "rewrite": "revised bullet using only supported facts", "reason": "why this wording fits the requirement", "interview_question": "a question the candidate should be ready to answer", "needs_confirmation": false}}
   ],
+  "experience_reviews": [
+    {{"experience_type": "work|internship|project|research|volunteering|leadership|other", "source_quote": "verbatim complete resume entry or bullet", "effect_quote": "verbatim result/effect excerpt or empty string", "scale_quote": "verbatim measurement or scale excerpt, including a number only if stated, or empty string", "beneficiary_quote": "verbatim excerpt showing who benefited, or empty string", "impact_summary": "short summary supported by these excerpts, or empty string", "follow_up_question": "ask about the missing real outcome, scale, or beneficiary; never suggest a fabricated number"}}
+  ],
   "technical_learning_notes": [
     {{"skill": "technical skill/tool required by the posting", "job_quote": "verbatim excerpt from the job description", "why_it_matters": "brief reason this skill is relevant", "practice_step": "a small project or study task to build it"}}
   ]
@@ -131,6 +134,11 @@ Rules:
 - Every suggestion must cite one exact, contiguous, complete bullet or line from the resume in source_quote. Do not cite a paraphrase. If no existing line can support a rewrite, do not create a suggestion for it.
 - Keep each rewrite truthful and directly traceable to its source_quote. Do not add claims that cannot be defended from that quote.
 - Set needs_confirmation to true when a rewrite depends on an ambiguous detail or would benefit from the candidate checking accuracy.
+- Review every work experience, internship, project, research role, volunteer role, and leadership activity in the resume. Include each relevant entry in experience_reviews, quoting its source exactly.
+- Evaluate each experience in three separate dimensions: (1) the effect/result, (2) scale or how much it changed (use a number only if the resume already states one), and (3) who benefited (users, customers, team, community, or society where relevant).
+- Each effect_quote, scale_quote, and beneficiary_quote must be an exact excerpt from source_quote for that dimension. Leave a field empty when the resume does not state it. Never invent a number, result, or social benefit.
+- Do not force a social-impact claim into ordinary work. Mention community or societal benefit only when the resume itself supports it.
+- Return at most 20 experience_reviews. If the resume contains no identifiable experience entries, use an empty array.
 - Make 3 to 8 concise requirements when a job description is supplied. If no job description is supplied, label requirements as role-based in their wording and do not imply access to private company criteria.
 - Return at most 8 suggestions. Use an empty suggestions array when the resume contains no supporting evidence.
 - technical_learning_notes must list only explicit technical skills, tools, frameworks, or platforms in the supplied job description that are not evidenced anywhere in the resume. Do not infer that the candidate lacks a skill merely because the resume omits it; describe these as "not shown in this resume" study candidates.
@@ -200,6 +208,33 @@ def parse_evidence_response(response_text: str, resume: str, job_description: st
             "grounded": grounded,
         })
 
+    experience_reviews = []
+    for item in result.get("experience_reviews", [])[:20]:
+        if not isinstance(item, dict):
+            continue
+        source_quote = str(item.get("source_quote", "")).strip()[:2000]
+        source_grounded = bool(source_quote) and normalized_evidence(source_quote) in source
+        if not source_grounded:
+            continue
+        source_entry = normalized_evidence(source_quote)
+        impact_dimensions = {}
+        for key in ("effect_quote", "scale_quote", "beneficiary_quote"):
+            quote = str(item.get(key, "")).strip()[:800]
+            grounded = bool(quote) and normalized_evidence(quote) in source_entry
+            impact_dimensions[key.removesuffix("_quote")] = {
+                "quote": quote if grounded else "",
+                "grounded": grounded,
+            }
+        has_impact_evidence = any(value["grounded"] for value in impact_dimensions.values())
+        experience_reviews.append({
+            "experience_type": str(item.get("experience_type", "experience"))[:80],
+            "source_quote": source_quote,
+            "impact_dimensions": impact_dimensions,
+            "impact_summary": str(item.get("impact_summary", ""))[:400] if has_impact_evidence else "",
+            "follow_up_question": str(item.get("follow_up_question", "What changed because of this work, by how much, and who benefited?"))[:500],
+            "has_impact_evidence": has_impact_evidence,
+        })
+
     technical_learning_notes = []
     for item in result.get("technical_learning_notes", [])[:10]:
         if not isinstance(item, dict):
@@ -217,6 +252,7 @@ def parse_evidence_response(response_text: str, resume: str, job_description: st
     return {
         "requirements": requirements,
         "suggestions": suggestions,
+        "experience_reviews": experience_reviews,
         "technical_learning_notes": technical_learning_notes,
     }
 

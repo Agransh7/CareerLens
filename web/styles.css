@@ -82,7 +82,25 @@ body { margin: 0; min-height: 100vh; background: var(--paper); }
 .subsection-heading h3 { margin: 0 0 4px; color: var(--ink); font: 700 18px Georgia, "Times New Roman", serif; }
 .subsection-heading p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 .requirement-map, .suggestion-list { display: grid; gap: 10px; }
+.experience-review-list { display: grid; gap: 10px; }
 .requirement-card, .suggestion-card { padding: 14px 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.experience-review-card { padding: 14px 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.experience-review-card.impact-missing { border-color: #e6c78e; background: #fffaf0; }
+.experience-review-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.experience-type { color: #505a69; font-size: 10px; font-weight: 700; letter-spacing: .7px; text-transform: uppercase; }
+.impact-status { padding: 4px 7px; border: 1px solid #d5d2c9; border-radius: 4px; color: #626b79; background: #f4f1e9; font-size: 10px; }
+.impact-found .impact-status { border-color: #a9c5aa; color: #3f6943; background: #edf5eb; }
+.impact-missing .impact-status { border-color: #e6c78e; color: #876122; background: #fff6df; }
+.experience-review-card blockquote { margin: 6px 0 0; padding: 8px 10px; border-left: 3px solid #8ca486; background: #f4f5eb; color: #455044; font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.impact-dimensions { display: grid; gap: 6px; margin-top: 10px; }
+.impact-dimension { display: grid; grid-template-columns: 120px 1fr; gap: 10px; padding: 7px 9px; border-radius: 4px; font-size: 11px; line-height: 1.45; }
+.impact-dimension strong { color: #4f5968; }
+.impact-dimension.present { background: #edf5eb; color: #435742; }
+.impact-dimension.missing { background: #fff1df; color: #78613a; }
+.impact-summary { margin: 7px 0 0; color: #566353; font-size: 12px; line-height: 1.5; }
+.impact-question { margin-top: 10px; padding: 9px 10px; border: 1px solid #eadbb9; border-radius: 5px; background: #fffdf7; }
+.impact-question strong { color: #665221; font-size: 11px; }
+.impact-question p { margin: 4px 0 0; color: #5d6559; font-size: 12px; line-height: 1.5; }
 .requirement-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .requirement-top h4, .suggestion-title h4 { margin: 0; color: var(--ink); font: 700 14px/1.4 Arial, sans-serif; }
 .requirement-card > p, .suggestion-reason { margin: 7px 0 0; color: #626b79; font-size: 12px; line-height: 1.55; }
