@@ -14,6 +14,8 @@ let generatedMarkdown = '';
 let originalResumeText = '';
 let currentSuggestions = [];
 let learningNotesStorageKey = '';
+let learningPlanStorageKey = '';
+let learningPlanItems = [];
 
 const themeToggle = document.querySelector('#themeToggle');
 const savedTheme = localStorage.getItem('careerlens-theme') || 'dark';
@@ -92,8 +94,9 @@ function renderRequirements(requirements) {
     container.innerHTML = '<p class="empty-state">No clear requirements were found. Add a job description and try again.</p>';
     return;
   }
-  for (const item of requirements) {
+  requirements.forEach((item, index) => {
     const card = document.createElement('article');
+    card.id = `requirement-card-${index}`;
     card.className = `requirement-card status-${item.status}`;
     const statusLabel = item.status === 'covered' ? 'Evidence found' : item.status === 'partial' ? 'Some evidence' : item.status === 'unverified' ? 'Quote not verified' : 'Gap';
     card.innerHTML = `<div class="requirement-top"><h4>${escapeHtml(item.requirement)}</h4><span class="status-badge">${statusLabel}</span></div><p>${escapeHtml(item.reason || '')}</p>`;
@@ -106,6 +109,67 @@ function renderRequirements(requirements) {
       card.append(quoteLabel, quote);
     }
     container.append(card);
+  });
+}
+
+function renderFitMap(requirements) {
+  const stats = document.querySelector('#fitMapStats');
+  const bar = document.querySelector('#fitMapBar');
+  const gapSummary = document.querySelector('#fitGapSummary');
+  const gapList = document.querySelector('#fitGapList');
+  stats.replaceChildren();
+  bar.replaceChildren();
+  gapList.replaceChildren();
+
+  if (!requirements.length) {
+    stats.innerHTML = '<p class="empty-state">No requirement breakdown is available for this role.</p>';
+    bar.hidden = true;
+    gapSummary.hidden = true;
+    return;
+  }
+
+  const counts = {
+    covered: requirements.filter((item) => item.status === 'covered').length,
+    partial: requirements.filter((item) => item.status === 'partial').length,
+    attention: requirements.filter((item) => !['covered', 'partial'].includes(item.status)).length,
+  };
+  const groups = [
+    ['covered', 'Evidence found', counts.covered],
+    ['partial', 'Some evidence', counts.partial],
+    ['attention', 'Needs attention', counts.attention],
+  ];
+  for (const [key, label, count] of groups) {
+    const stat = document.createElement('div');
+    stat.className = `fit-map-stat ${key}`;
+    const number = document.createElement('strong');
+    number.textContent = String(count);
+    const caption = document.createElement('span');
+    caption.textContent = label;
+    stat.append(number, caption);
+    stats.append(stat);
+
+    if (count) {
+      const segment = document.createElement('span');
+      segment.className = `fit-map-segment ${key}`;
+      segment.style.width = `${(count / requirements.length) * 100}%`;
+      bar.append(segment);
+    }
+  }
+  bar.hidden = false;
+  bar.setAttribute('aria-label', `Requirement status: ${counts.covered} with evidence, ${counts.partial} with some evidence, ${counts.attention} needing attention.`);
+
+  const gaps = requirements.map((item, index) => ({ item, index })).filter(({ item }) => !['covered', 'partial'].includes(item.status));
+  gapSummary.hidden = !gaps.length;
+  for (const { item, index } of gaps) {
+    const link = document.createElement('a');
+    link.className = 'fit-gap-link';
+    link.href = `#requirement-card-${index}`;
+    const name = document.createElement('span');
+    name.textContent = item.requirement;
+    const action = document.createElement('small');
+    action.textContent = item.status === 'unverified' ? 'Check quote' : 'Review evidence';
+    link.append(name, action);
+    gapList.append(link);
   }
 }
 
@@ -251,7 +315,13 @@ function renderTechnicalLearningNotes(notes, jobDescription) {
       const practice = document.createElement('p');
       practice.className = 'practice-step';
       practice.innerHTML = `<strong>Try this:</strong> ${escapeHtml(item.practice_step)}`;
-      card.append(skill, quoteLabel, quote, reason, practice);
+      const addToPlan = document.createElement('button');
+      addToPlan.type = 'button';
+      addToPlan.className = 'plan-add-button';
+      addToPlan.dataset.skill = item.skill;
+      addToPlan.textContent = 'Add to learning plan';
+      addToPlan.addEventListener('click', () => addLearningPlanItem(item));
+      card.append(skill, quoteLabel, quote, reason, practice, addToPlan);
       container.append(card);
     }
   }
@@ -260,11 +330,72 @@ function renderTechnicalLearningNotes(notes, jobDescription) {
   let hash = 2166136261;
   for (let index = 0; index < keySource.length; index += 1) hash = Math.imul(hash ^ keySource.charCodeAt(index), 16777619);
   learningNotesStorageKey = `careerlens-learning-${hash >>> 0}`;
+  learningPlanStorageKey = `careerlens-plan-${hash >>> 0}`;
   const defaultNotes = notes.map((item) => `${item.skill}\nWhy it matters: ${item.why_it_matters}\nPractice: ${item.practice_step}`).join('\n\n');
   let savedNotes = '';
   try { savedNotes = localStorage.getItem(learningNotesStorageKey) || ''; } catch {}
   document.querySelector('#learningNotes').value = savedNotes || defaultNotes;
   document.querySelector('#notesSavedStatus').textContent = savedNotes ? 'Saved in this browser' : '';
+  let savedPlan = [];
+  try { savedPlan = JSON.parse(localStorage.getItem(learningPlanStorageKey) || '[]'); } catch {}
+  const availableSkills = new Set(notes.map((item) => item.skill.toLocaleLowerCase()));
+  learningPlanItems = Array.isArray(savedPlan)
+    ? savedPlan.filter((item) => item && typeof item.skill === 'string' && availableSkills.has(item.skill.toLocaleLowerCase()))
+      .map((item) => ({ skill: item.skill, practice: String(item.practice || ''), done: Boolean(item.done) }))
+    : [];
+  renderLearningPlan();
+}
+
+function saveLearningPlan() {
+  try { localStorage.setItem(learningPlanStorageKey, JSON.stringify(learningPlanItems)); } catch {}
+}
+
+function renderLearningPlan() {
+  const panel = document.querySelector('#learningPlan');
+  const list = document.querySelector('#learningPlanList');
+  const progress = document.querySelector('#learningPlanProgress');
+  list.replaceChildren();
+  panel.hidden = learningPlanItems.length === 0;
+  const completed = learningPlanItems.filter((item) => item.done).length;
+  progress.textContent = `${completed} of ${learningPlanItems.length} complete`;
+
+  for (const item of learningPlanItems) {
+    const row = document.createElement('li');
+    row.className = `learning-plan-item ${item.done ? 'complete' : ''}`;
+    const label = document.createElement('label');
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = item.done;
+    checkbox.setAttribute('aria-label', `Mark ${item.skill} as learned`);
+    checkbox.addEventListener('change', () => {
+      item.done = checkbox.checked;
+      saveLearningPlan();
+      renderLearningPlan();
+    });
+    const copy = document.createElement('span');
+    const skill = document.createElement('strong');
+    skill.textContent = item.skill;
+    const practice = document.createElement('small');
+    practice.textContent = item.practice;
+    copy.append(skill, practice);
+    label.append(checkbox, copy);
+    row.append(label);
+    list.append(row);
+  }
+
+  document.querySelectorAll('.plan-add-button').forEach((button) => {
+    const isAdded = learningPlanItems.some((item) => item.skill.toLocaleLowerCase() === button.dataset.skill.toLocaleLowerCase());
+    button.disabled = isAdded;
+    button.textContent = isAdded ? 'Added to learning plan' : 'Add to learning plan';
+  });
+}
+
+function addLearningPlanItem(note) {
+  if (learningPlanItems.some((item) => item.skill.toLocaleLowerCase() === note.skill.toLocaleLowerCase())) return;
+  learningPlanItems.push({ skill: note.skill, practice: note.practice_step, done: false });
+  saveLearningPlan();
+  renderLearningPlan();
+  document.querySelector('#learningPlan').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function replaceSourceExcerpt(text, quote, replacement) {
@@ -309,6 +440,7 @@ form.addEventListener('submit', async (event) => {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || 'Could not tailor the resume. Please try again.');
     renderRequirements(result.requirements || []);
+    renderFitMap(result.requirements || []);
     renderExperienceReviews(result.experience_reviews || []);
     renderSuggestions(result.suggestions || []);
     const effectiveJobDescription = result.job_posting?.job_description || document.querySelector('#jobDescription').value;
