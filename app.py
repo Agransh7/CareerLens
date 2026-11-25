@@ -332,6 +332,38 @@ def parse_evidence_response(response_text: str, resume: str, job_description: st
     }
 
 
+class RequestError(ValueError):
+    def __init__(self, status: int, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+def tailor_resume(data: dict) -> dict:
+    if not isinstance(data, dict):
+        raise RequestError(400, "Request body must be a JSON object.")
+    company = str(data.get("company", "")).strip()[:100]
+    resume = str(data.get("resume", "")).strip()
+    role = str(data.get("role", "")).strip()[:150]
+    job_description = str(data.get("jobDescription", "")).strip()[:6000]
+    if not company or not resume:
+        raise RequestError(400, "Add a target company and resume text.")
+    if not role and not job_description:
+        raise RequestError(400, "Add a target role or job description so CareerLens can build a meaningful evidence map.")
+    if len(resume) > MAX_RESUME:
+        raise RequestError(413, "Resume text is too long. Keep it under 50,000 characters.")
+    normalized = {"company": company, "role": role, "jobDescription": job_description, "resume": resume}
+    job_posting = None
+    if not job_description:
+        job_posting = find_public_job_listing(company, role)
+        if job_posting:
+            normalized["jobDescription"] = job_posting["job_description"]
+            normalized["jobSourceURL"] = job_posting["source_url"]
+            normalized["jobTitle"] = job_posting["title"]
+    response_text, model = call_gemini(make_prompt(normalized))
+    result = parse_evidence_response(response_text, resume, normalized["jobDescription"])
+    return {**result, "model": model, "job_posting": job_posting}
+
+
 class CareerLensHandler(BaseHTTPRequestHandler):
     server_version = "CareerLens/1.0"
 
@@ -359,39 +391,9 @@ class CareerLensHandler(BaseHTTPRequestHandler):
                 self.send_json(413, {"error": "Request is empty or too large."})
                 return
             data = json.loads(self.rfile.read(size).decode("utf-8"))
-            if not isinstance(data, dict):
-                raise ValueError("Request body must be a JSON object.")
-            company = str(data.get("company", "")).strip()[:100]
-            resume = str(data.get("resume", "")).strip()
-            role = str(data.get("role", "")).strip()[:150]
-            job_description = str(data.get("jobDescription", "")).strip()[:6000]
-            if not company or not resume:
-                self.send_json(400, {"error": "Add a target company and resume text."})
-                return
-            if not role and not job_description:
-                self.send_json(400, {"error": "Add a target role or job description so CareerLens can build a meaningful evidence map."})
-                return
-            if len(resume) > MAX_RESUME:
-                self.send_json(413, {"error": "Resume text is too long. Keep it under 50,000 characters."})
-                return
-            normalized = {
-                "company": company,
-                "role": role,
-                "jobDescription": job_description,
-                "resume": resume,
-            }
-            job_posting = None
-            if not job_description:
-                job_posting = find_public_job_listing(company, role)
-                if job_posting:
-                    normalized["jobDescription"] = job_posting["job_description"]
-                    normalized["jobSourceURL"] = job_posting["source_url"]
-                    normalized["jobTitle"] = job_posting["title"]
-            response_text, model = call_gemini(make_prompt(normalized))
-            result = parse_evidence_response(response_text, resume, normalized["jobDescription"])
-            self.send_json(200, {**result, "model": model, "job_posting": job_posting})
+            self.send_json(200, tailor_resume(data))
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
-            self.send_json(400, {"error": str(error) or "Request must contain valid JSON."})
+            self.send_json(getattr(error, "status", 400), {"error": str(error) or "Request must contain valid JSON."})
         except RuntimeError as error:
             self.send_json(502, {"error": str(error)})
         except Exception:

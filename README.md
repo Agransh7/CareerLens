@@ -12,6 +12,12 @@ CareerLens is a local resume tailoring website. The frontend uses HTML, CSS, and
 
 Stop the server with **Ctrl+C** in its terminal. Change the port with `PORT` in `.env` if 8080 is already in use.
 
+## Public deployment on Vercel
+
+This repository includes a Vercel static frontend and a Python serverless endpoint. Import `Agransh7/CareerLens` into Vercel, set `GEMINI_API_KEY` in the project's Environment Variables, and deploy. Keep the key out of Git and do not upload `.env`. Set `GEMINI_MODELS` there too if the defaults are not enabled for your project.
+
+Before sharing a public URL, configure a Vercel Firewall rate limit for `POST /api/tailor` (for example, 3 requests per minute per IP). Each successful request uses your Gemini API key and may create usage charges. CareerLens does not store resume text, but sends it to Gemini when submitted. Treat the deployment as public: anyone with the URL can use it.
+
 ## Gemini fallback
 
 CareerLens tries the comma-separated models in `GEMINI_MODELS` in order. The default list is `gemini-3.8-flash,gemini-3.5-flash-lite,gemini-3.5-flash`. For temporary 429 or 5xx responses, it retries a model up to three times with short delays, then moves to the next model. Errors show which models were attempted. Adjust the list in `.env` if your Gemini project has different model access.

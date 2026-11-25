@@ -1,4 +1,5 @@
 .env
+.vercel/
 build/
 __pycache__/
 *.user
