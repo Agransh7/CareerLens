@@ -180,7 +180,7 @@ def make_prompt(data: dict) -> str:
     role = data.get("role") or "Not provided"
     return f"""You are CareerLens Evidence Mode, a careful resume editor. Analyze the candidate's resume against the supplied job description and role.
 
-Return only a JSON object with exactly these top-level arrays:
+Return only a JSON object with exactly these top-level fields:
 {{
   "requirements": [
     {{"requirement": "short requirement", "status": "covered|partial|gap", "evidence_quote": "verbatim resume excerpt or empty string", "reason": "brief explanation"}}
@@ -193,7 +193,12 @@ Return only a JSON object with exactly these top-level arrays:
   ],
   "technical_learning_notes": [
     {{"skill": "technical skill/tool relevant to the role", "job_quote": "verbatim excerpt from job description, or empty when no posting was found", "source_label": "Job description or role-based estimate", "why_it_matters": "brief reason this skill is relevant", "practice_step": "a small project or study task to build it"}}
-  ]
+  ],
+  "linkedin_profile": {{
+    "headline": {{"text": "LinkedIn headline tailored to the target role", "source_quotes": ["exact resume excerpt supporting skills or experience mentioned"]}},
+    "about": {{"text": "concise LinkedIn About section based only on verified resume facts", "source_quotes": ["exact resume excerpts supporting the summary"]}},
+    "experience_updates": [{{"source_quote": "verbatim complete resume bullet or line", "text": "LinkedIn-ready rewrite using only facts from source_quote"}}]
+  }}
 }}
 
 Rules:
@@ -212,6 +217,7 @@ Rules:
 - When a job description is supplied, technical_learning_notes must list technical skills, tools, frameworks, or platforms explicitly required or preferred there that are not mentioned anywhere in the resume. Treat each unmentioned skill as a learning requirement for this candidate; do not hedge that the candidate might already know it. Include a verbatim job_quote and set source_label to "From the job description".
 - When no job description was found or supplied, infer 3 to 8 common technical skills/tools for the target role (not company-specific criteria). If a skill is not mentioned anywhere in the resume, include it as a learning requirement and set source_label to "Typical role requirement; no exact posting found". Leave job_quote empty in this case.
 - Do not include generic soft skills. Consider equivalent skill names and resume context before treating a technical skill as missing.
+- Create a LinkedIn profile update kit. Tailor its headline and About section to the target role and company, but include only skills, education, and experience supported by the resume. Include 1 to 4 exact resume excerpts in source_quotes to support each text field; if you cannot support it, leave its text empty. Create up to 6 experience_updates from exact resume bullets/lines, keeping every claim and metric faithful to the source_quote. Do not add contact details or private information.
 
 Company: {data['company']}
 Target role: {role}
@@ -324,11 +330,44 @@ def parse_evidence_response(response_text: str, resume: str, job_description: st
             "why_it_matters": str(item.get("why_it_matters", ""))[:400],
             "practice_step": str(item.get("practice_step", ""))[:500],
         })
+    profile_result = result.get("linkedin_profile", {})
+
+    def grounded_profile_text(value: object, limit: int) -> dict:
+        if not isinstance(value, dict):
+            return {"text": "", "source_quotes": []}
+        quotes = []
+        raw_quotes = value.get("source_quotes", [])
+        if not isinstance(raw_quotes, list):
+            raw_quotes = []
+        for raw_quote in raw_quotes[:4]:
+            quote = str(raw_quote).strip()[:1500]
+            if quote and normalized_evidence(quote) in source:
+                quotes.append(quote)
+        text = str(value.get("text", "")).strip()[:limit] if quotes else ""
+        return {"text": text, "source_quotes": quotes}
+
+    linkedin_profile = {
+        "headline": grounded_profile_text(profile_result.get("headline", {}), 220) if isinstance(profile_result, dict) else {"text": "", "source_quotes": []},
+        "about": grounded_profile_text(profile_result.get("about", {}), 2600) if isinstance(profile_result, dict) else {"text": "", "source_quotes": []},
+        "experience_updates": [],
+    }
+    if isinstance(profile_result, dict):
+        updates = profile_result.get("experience_updates", [])
+        if not isinstance(updates, list):
+            updates = []
+        for item in updates[:6]:
+            if not isinstance(item, dict):
+                continue
+            quote = str(item.get("source_quote", "")).strip()[:1500]
+            text = str(item.get("text", "")).strip()[:1500]
+            if quote and text and normalized_evidence(quote) in source:
+                linkedin_profile["experience_updates"].append({"source_quote": quote, "text": text})
     return {
         "requirements": requirements,
         "suggestions": suggestions,
         "experience_reviews": experience_reviews,
         "technical_learning_notes": technical_learning_notes,
+        "linkedin_profile": linkedin_profile,
     }
 
 
