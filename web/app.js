@@ -256,58 +256,6 @@ function renderTechnicalLearningNotes(notes, jobDescription) {
   document.querySelector('#notesSavedStatus').textContent = savedNotes ? 'Saved in this browser' : '';
 }
 
-function renderLinkedInProfile(profile = {}) {
-  const headline = profile.headline || {};
-  const about = profile.about || {};
-  document.querySelector('#linkedinHeadline').value = headline.text || '';
-  document.querySelector('#linkedinAbout').value = about.text || '';
-  document.querySelector('#linkedinHeadlineSources').textContent = (headline.source_quotes || []).length ? 'Built from resume details' : '';
-  document.querySelector('#linkedinAboutSources').textContent = (about.source_quotes || []).length ? 'Built from resume details' : '';
-  const container = document.querySelector('#linkedinExperienceUpdates');
-  container.replaceChildren();
-  const updates = profile.experience_updates || [];
-  if (!updates.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-state';
-    empty.textContent = 'No experience updates could be grounded in the resume.';
-    container.append(empty);
-    return;
-  }
-  updates.forEach((item, index) => {
-    const card = document.createElement('article');
-    card.className = 'linkedin-experience-card';
-    const title = document.createElement('h5');
-    title.textContent = `Experience update ${index + 1}`;
-    const source = document.createElement('blockquote');
-    source.textContent = `Resume source: ${item.source_quote}`;
-    const rewrite = document.createElement('textarea');
-    rewrite.rows = 3;
-    rewrite.value = item.text || '';
-    rewrite.setAttribute('aria-label', `LinkedIn experience update ${index + 1}`);
-    const copy = document.createElement('button');
-    copy.className = 'secondary-button';
-    copy.type = 'button';
-    copy.textContent = 'Copy experience update';
-    copy.addEventListener('click', () => copyLinkedInText(rewrite.value));
-    card.append(title, source, rewrite, copy);
-    container.append(card);
-  });
-}
-
-async function copyLinkedInText(value) {
-  const status = document.querySelector('#linkedinCopyStatus');
-  if (!value.trim()) {
-    status.textContent = 'There is no text to copy yet.';
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(value);
-    status.textContent = 'Copied. Paste it into your LinkedIn profile.';
-  } catch {
-    status.textContent = 'Copy was blocked by your browser. Select and copy the text manually.';
-  }
-}
-
 function replaceSourceExcerpt(text, quote, replacement) {
   if (!quote.trim()) return text;
   const pattern = quote.trim().split(/\s+/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
@@ -353,7 +301,6 @@ form.addEventListener('submit', async (event) => {
     renderSuggestions(result.suggestions || []);
     const effectiveJobDescription = result.job_posting?.job_description || document.querySelector('#jobDescription').value;
     renderTechnicalLearningNotes(result.technical_learning_notes || [], effectiveJobDescription);
-    renderLinkedInProfile(result.linkedin_profile || {});
     document.querySelector('#resultCompany').textContent = companyInput.value.trim();
     document.querySelector('#modelUsed').textContent = result.model ? ` · ${result.model}` : '';
     const jobMatch = document.querySelector('#jobMatch');
@@ -387,9 +334,27 @@ document.querySelector('#downloadButton').addEventListener('click', () => {
   link.click();
   URL.revokeObjectURL(link.href);
 });
-for (const button of document.querySelectorAll('.copy-linkedin-field')) {
-  button.addEventListener('click', () => copyLinkedInText(document.querySelector(`#${button.dataset.copyTarget}`).value));
-}
+document.querySelector('#openGmailDraft').addEventListener('click', () => {
+  const recipient = document.querySelector('#companyEmail');
+  const status = document.querySelector('#emailDraftStatus');
+  status.textContent = '';
+  if (!generatedMarkdown.trim()) {
+    status.textContent = 'Generate your resume preview before opening an email draft.';
+    return;
+  }
+  if (!recipient.value.trim() || !recipient.checkValidity()) {
+    status.textContent = 'Enter a valid recruiter or company email address.';
+    recipient.focus();
+    return;
+  }
+  const role = document.querySelector('#role').value.trim();
+  const company = companyInput.value.trim();
+  const subject = `Application${role ? `: ${role}` : ''} at ${company}`;
+  const body = `Hello,\n\nI am applying${role ? ` for the ${role} role` : ''} at ${company}. Please find my resume below.\n\n${generatedMarkdown}\n\nRegards,\n${generatedMarkdown.split(/\r?\n/).find((line) => line.trim()) || ''}`;
+  const params = new URLSearchParams({ view: 'cm', fs: '1', to: recipient.value.trim(), su: subject, body });
+  window.open(`https://mail.google.com/mail/?${params.toString()}`, '_blank', 'noopener,noreferrer');
+  status.textContent = 'Gmail draft opened. Review the message and press Send in Gmail.';
+});
 document.querySelector('#copyButton').addEventListener('click', async (event) => {
   await navigator.clipboard.writeText(generatedMarkdown);
   event.currentTarget.textContent = 'Copied';
