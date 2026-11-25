@@ -4,6 +4,9 @@
   "functions": {
     "api/tailor.py": {
       "maxDuration": 300
+    },
+    "api/export.py": {
+      "maxDuration": 30
     }
   }
 }

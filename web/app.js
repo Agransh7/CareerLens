@@ -15,6 +15,17 @@ let originalResumeText = '';
 let currentSuggestions = [];
 let learningNotesStorageKey = '';
 
+const themeToggle = document.querySelector('#themeToggle');
+const savedTheme = localStorage.getItem('careerlens-theme') || 'dark';
+document.body.dataset.theme = savedTheme;
+themeToggle.textContent = savedTheme === 'dark' ? 'Light theme' : 'Dark theme';
+themeToggle.addEventListener('click', () => {
+  const nextTheme = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
+  document.body.dataset.theme = nextTheme;
+  localStorage.setItem('careerlens-theme', nextTheme);
+  themeToggle.textContent = nextTheme === 'dark' ? 'Light theme' : 'Dark theme';
+});
+
 for (const chip of document.querySelectorAll('.company-chip')) {
   chip.addEventListener('click', () => {
     companyInput.value = chip.dataset.company;
@@ -277,7 +288,8 @@ function updatePreview() {
     ? `${accepted} suggestion${accepted === 1 ? '' : 's'} added · confirm ${warning} detail${warning === 1 ? '' : 's'} before copying or downloading.`
     : `${accepted} suggestion${accepted === 1 ? '' : 's'} added.`;
   document.querySelector('#copyButton').disabled = warning > 0;
-  document.querySelector('#downloadButton').disabled = warning > 0;
+  document.querySelector('#downloadDocxButton').disabled = warning > 0;
+  document.querySelector('#downloadPdfButton').disabled = warning > 0;
 }
 
 form.addEventListener('submit', async (event) => {
@@ -326,14 +338,37 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-document.querySelector('#downloadButton').addEventListener('click', () => {
-  const blob = new Blob([generatedMarkdown], { type: 'text/markdown;charset=utf-8' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `CareerLens-${companyInput.value.trim().replace(/[^a-z0-9]+/gi, '-')}-resume.md`;
-  link.click();
-  URL.revokeObjectURL(link.href);
-});
+async function downloadResume(format) {
+  const button = document.querySelector(format === 'docx' ? '#downloadDocxButton' : '#downloadPdfButton');
+  const originalLabel = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Creating…';
+  try {
+    const response = await fetch('/api/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resume: generatedMarkdown, format }),
+    });
+    if (!response.ok) {
+      const issue = await response.json().catch(() => ({}));
+      throw new Error(issue.error || 'Could not create the resume file. Try again.');
+    }
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const companySlug = companyInput.value.trim().replace(/[^a-z0-9]+/gi, '-') || 'company';
+    link.download = `CareerLens-${companySlug}-resume.${format}`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  } catch (error) {
+    document.querySelector('#emailDraftStatus').textContent = error.message;
+  } finally {
+    button.textContent = originalLabel;
+    button.disabled = currentSuggestions.some((item) => item.included && item.needs_confirmation);
+  }
+}
+document.querySelector('#downloadDocxButton').addEventListener('click', () => downloadResume('docx'));
+document.querySelector('#downloadPdfButton').addEventListener('click', () => downloadResume('pdf'));
 document.querySelector('#openGmailDraft').addEventListener('click', () => {
   const recipient = document.querySelector('#companyEmail');
   const status = document.querySelector('#emailDraftStatus');
@@ -350,10 +385,10 @@ document.querySelector('#openGmailDraft').addEventListener('click', () => {
   const role = document.querySelector('#role').value.trim();
   const company = companyInput.value.trim();
   const subject = `Application${role ? `: ${role}` : ''} at ${company}`;
-  const body = `Hello,\n\nI am applying${role ? ` for the ${role} role` : ''} at ${company}. Please find my resume below.\n\n${generatedMarkdown}\n\nRegards,\n${generatedMarkdown.split(/\r?\n/).find((line) => line.trim()) || ''}`;
+  const body = `Hello,\n\nI am applying${role ? ` for the ${role} role` : ''} at ${company}. Please find my resume attached.\n\nRegards,\n${generatedMarkdown.split(/\r?\n/).find((line) => line.trim()) || ''}`;
   const params = new URLSearchParams({ view: 'cm', fs: '1', to: recipient.value.trim(), su: subject, body });
   window.open(`https://mail.google.com/mail/?${params.toString()}`, '_blank', 'noopener,noreferrer');
-  status.textContent = 'Gmail draft opened. Review the message and press Send in Gmail.';
+  status.textContent = 'Gmail draft opened. Attach the downloaded PDF or DOCX, then review and send it.';
 });
 document.querySelector('#copyButton').addEventListener('click', async (event) => {
   await navigator.clipboard.writeText(generatedMarkdown);

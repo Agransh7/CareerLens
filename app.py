@@ -5,8 +5,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import html
+import io
+import textwrap
 import time
 import unicodedata
+import zipfile
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -17,6 +21,80 @@ ROOT = Path(__file__).resolve().parent
 WEB_DIR = ROOT / "web"
 MAX_BODY = 160_000
 MAX_RESUME = 50_000
+
+
+def _docx_xml(text: str) -> bytes:
+    """Build a small, valid Word document with standard-library OOXML."""
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text)
+    paragraphs = []
+    for line in text.splitlines() or [""]:
+        safe = html.escape(line, quote=False)
+        paragraphs.append(f'<w:p><w:r><w:t xml:space="preserve">{safe}</w:t></w:r></w:p>')
+    document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+        '<w:body>' + ''.join(paragraphs) +
+        '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080"/></w:sectPr>'
+        '</w:body></w:document>').encode("utf-8")
+    content_types = (b'<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        b'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        b'<Default Extension="xml" ContentType="application/xml"/>'
+        b'<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+        b'</Types>')
+    rels = (b'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        b'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+        b'</Relationships>')
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as docx:
+        docx.writestr("[Content_Types].xml", content_types)
+        docx.writestr("_rels/.rels", rels)
+        docx.writestr("word/document.xml", document)
+    return archive.getvalue()
+
+
+def _pdf_bytes(text: str) -> bytes:
+    """Create a readable multi-page PDF with a built-in standard font."""
+    lines = []
+    for line in text.splitlines() or [""]:
+        lines.extend(textwrap.wrap(line, width=90, break_long_words=True) or [""])
+    pages = [lines[i:i + 52] for i in range(0, len(lines), 52)] or [[""]]
+    objects: list[bytes] = []
+    font_id = 3 + 2 * len(pages)
+    objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
+    kids = " ".join(f"{3 + 2*i} 0 R" for i in range(len(pages)))
+    objects.append(f"<< /Type /Pages /Kids [{kids}] /Count {len(pages)} >>".encode())
+    for index, page_lines in enumerate(pages):
+        page_id, content_id = 3 + 2*index, 4 + 2*index
+        commands = ["BT", "/F1 10 Tf", "50 790 Td", "14 TL"]
+        for line in page_lines:
+            encoded = line.encode("cp1252", errors="replace").decode("cp1252")
+            escaped = encoded.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+            commands.extend([f"({escaped}) Tj", "T*"])
+        commands.append("ET")
+        stream = "\n".join(commands).encode("cp1252")
+        objects.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 {font_id} 0 R >> >> /Contents {content_id} 0 R >>".encode())
+        objects.append(f"<< /Length {len(stream)} >>\nstream\n".encode() + stream + b"\nendstream")
+    objects.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    pdf = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(pdf))
+        pdf.extend(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
+    xref = len(pdf)
+    pdf.extend(f"xref\n0 {len(offsets)}\n0000000000 65535 f \n".encode())
+    for offset in offsets[1:]: pdf.extend(f"{offset:010d} 00000 n \n".encode())
+    pdf.extend(f"trailer\n<< /Size {len(offsets)} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF".encode())
+    return bytes(pdf)
+
+
+def export_resume(data: dict, file_format: str) -> bytes:
+    if not isinstance(data, dict):
+        raise RequestError(400, "Request body must be a JSON object.")
+    text = data.get("resume", "")
+    if not isinstance(text, str) or not text.strip() or len(text) > MAX_RESUME:
+        raise RequestError(400, "Generate a resume preview before downloading it.")
+    if file_format == "docx": return _docx_xml(text)
+    if file_format == "pdf": return _pdf_bytes(text)
+    raise RequestError(400, "Choose PDF or DOCX.")
 
 
 def load_dotenv() -> None:
@@ -382,6 +460,29 @@ class CareerLensHandler(BaseHTTPRequestHandler):
         self.wfile.write(encoded)
 
     def do_POST(self) -> None:
+        if self.path == "/api/export":
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                if size < 1 or size > MAX_RESUME * 2:
+                    self.send_json(413, {"error": "Request is empty or too large."})
+                    return
+                payload = json.loads(self.rfile.read(size).decode("utf-8"))
+                file_format = str(payload.get("format", ""))
+                content = export_resume(payload, file_format)
+                mime = "application/pdf" if file_format == "pdf" else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Disposition", f'attachment; filename="CareerLens-resume.{file_format}"')
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(content)
+            except RequestError as error:
+                self.send_json(error.status, {"error": str(error)})
+            except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
+                self.send_json(400, {"error": str(error) or "Request must contain valid JSON."})
+            return
         if self.path != "/api/tailor":
             self.send_json(404, {"error": "API route not found."})
             return

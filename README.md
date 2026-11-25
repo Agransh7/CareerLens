@@ -36,10 +36,15 @@ In VS Code, run **Ctrl+Shift+P → Tasks: Run Task → CareerLens: commit and pu
 - A technical learning panel lists required job-posting skills not mentioned in the resume as learning requirements. When there is no exact posting, it uses common role-based technical expectations and labels them accordingly.
 - Review, edit, add, or remove suggestions; unverified quotes cannot be applied to the preview.
 - Each suggestion includes an interview question. Suggestions flagged for confirmation must be cleared before copying or downloading.
-- Copy or download the updated resume preview as Markdown.
-- Open a prefilled Gmail draft addressed to the recruiter or company email you enter, with the generated resume in the email body. Review and send it from Gmail. Direct automatic sending requires a Google OAuth setup, which this project does not include.
+- Switch between a charcoal and soft-purple dark theme and a warm light theme. The selection is saved in the browser.
+- Copy the updated preview or download it as a DOCX or PDF. Exports contain the preview text and use a simple document layout.
+- Open a prefilled Gmail draft addressed to the recruiter or company email you enter. Download the DOCX or PDF and attach it manually before sending. Gmail compose links cannot attach files; direct email sending would require a Google OAuth integration, which this project does not include.
 - Resume text is sent to Gemini only when you submit. CareerLens does not save the file or request.
 - PDF reading uses PDF.js from a CDN. Scanned PDFs need OCR, which this starter does not include.
+
+## Project presentation and report
+
+The `ProjectFiles` folder contains a 10-slide presentation and a 12-page project report, prepared for Agransh and Ayaan at JUIT Solan.
 
 Always review generated content for accuracy before applying.
 

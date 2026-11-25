@@ -1,4 +1,19 @@
 :root {
+  color-scheme: dark;
+  --ink: #f0edf7;
+  --muted: #b0aabd;
+  --line: #383442;
+  --paper: #17151d;
+  --card: #211e29;
+  --orange: #b9a1ec;
+  --orange-dark: #a184dc;
+  --pale-orange: #30283f;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+body[data-theme="light"] {
   color-scheme: light;
   --ink: #242d40;
   --muted: #727987;
@@ -8,9 +23,6 @@
   --orange: #e66d4d;
   --orange-dark: #ca5638;
   --pale-orange: #fce9df;
-  font-family: Arial, Helvetica, sans-serif;
-  color: var(--ink);
-  background: var(--paper);
 }
 
 * { box-sizing: border-box; }
@@ -19,6 +31,9 @@ body { margin: 0; min-height: 100vh; background: var(--paper); }
 .brand { display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none; font-size: 16px; font-weight: 700; letter-spacing: -.4px; }
 .brand-mark { width: 27px; height: 27px; display: grid; place-items: center; border: 1px solid var(--ink); border-radius: 50%; font-family: Georgia, serif; font-size: 17px; font-weight: 400; }
 .top-note { color: var(--muted); font-size: 12px; }
+.topbar-tools { display: flex; align-items: center; gap: 13px; }
+.theme-toggle { padding: 7px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--card); color: var(--ink); font: 11px Arial, sans-serif; cursor: pointer; }
+.theme-toggle:hover { border-color: var(--orange-dark); }
 .shell { width: min(700px, calc(100% - 32px)); margin: 0 auto; }
 .intro { padding: 45px 0 25px; }
 .eyebrow, .section-kicker { color: var(--orange-dark); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; }
@@ -155,6 +170,46 @@ body { margin: 0; min-height: 100vh; background: var(--paper); }
 .notes-footer { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .notes-footer #notesSavedStatus { color: #766b4d; font-size: 11px; }
 .page-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 24px; padding: 13px 2px 20px; border-top: 1px solid var(--line); color: #686f7b; font-size: 11px; }
+
+body:not([data-theme="light"]) .topbar { background: var(--paper); }
+body:not([data-theme="light"]) .workspace { box-shadow: 3px 4px 0 #100f15; }
+body:not([data-theme="light"]) .field-label-row label, body:not([data-theme="light"]) .field label,
+body:not([data-theme="light"]) .email-compose-row label { color: #d0cadb; }
+body:not([data-theme="light"]) .intro p, body:not([data-theme="light"]) .page-footer { color: #b0aabd; }
+body:not([data-theme="light"]) .company-wrap, body:not([data-theme="light"]) .field input,
+body:not([data-theme="light"]) .field textarea, body:not([data-theme="light"]) .rewrite-input,
+body:not([data-theme="light"]) .learning-notes, body:not([data-theme="light"]) .email-compose-row input,
+body:not([data-theme="light"]) .secondary-button, body:not([data-theme="light"]) .keep-button { background: #292632; color: var(--ink); border-color: #494453; }
+body:not([data-theme="light"]) .company-chip, body:not([data-theme="light"]) .dropzone,
+body:not([data-theme="light"]) .empty-state { background: #282530; color: #d6d0df; border-color: #494453; }
+body:not([data-theme="light"]) .dropzone:hover, body:not([data-theme="light"]) .dropzone.dragging { background: #30283f; }
+body:not([data-theme="light"]) .drop-copy strong, body:not([data-theme="light"]) .resume-preview { color: #e6e0ef; }
+body:not([data-theme="light"]) .job-match { border-color: #4d4759; background: #292632; color: #ddd5ed; }
+body:not([data-theme="light"]) .job-match a { color: #c4afeF; }
+body:not([data-theme="light"]) .job-match small { color: #b0aabd; }
+body:not([data-theme="light"]) .experience-review-card.impact-missing,
+body:not([data-theme="light"]) .suggestion-card.unverified { border-color: #66563c; background: #302a22; }
+body:not([data-theme="light"]) .impact-status, body:not([data-theme="light"]) .status-badge,
+body:not([data-theme="light"]) .interview-check { border-color: #494453; background: #2a2732; color: #d0cadb; }
+body:not([data-theme="light"]) .impact-found .impact-status, body:not([data-theme="light"]) .status-covered .status-badge { border-color: #495849; background: #283129; color: #bed3c0; }
+body:not([data-theme="light"]) .impact-missing .impact-status, body:not([data-theme="light"]) .status-partial .status-badge { border-color: #66563c; background: #302a22; color: #e3ce9c; }
+body:not([data-theme="light"]) .status-gap .status-badge, body:not([data-theme="light"]) .status-unverified .status-badge { border-color: #684c4c; background: #332628; color: #e7b9b4; }
+body:not([data-theme="light"]) .experience-review-card blockquote, body:not([data-theme="light"]) .requirement-card blockquote,
+body:not([data-theme="light"]) .source-quote, body:not([data-theme="light"]) .impact-dimension.present { background: #292b2b; color: #d0dbd1; }
+body:not([data-theme="light"]) .impact-dimension.missing, body:not([data-theme="light"]) .impact-question,
+body:not([data-theme="light"]) .technical-gap-card blockquote { background: #302a22; color: #e0d3af; border-color: #66563c; }
+body:not([data-theme="light"]) .learning-panel { border-color: #554766; background: #282330; }
+body:not([data-theme="light"]) .learning-panel .subsection-heading h3, body:not([data-theme="light"]) .learning-notes-label,
+body:not([data-theme="light"]) .practice-step strong, body:not([data-theme="light"]) .learning-panel .subsection-heading p { color: #d0c2ec; }
+body:not([data-theme="light"]) .technical-gap-card { border-color: #494453; background: #24212c; }
+body:not([data-theme="light"]) .technical-gap-card h4, body:not([data-theme="light"]) .requirement-top h4,
+body:not([data-theme="light"]) .suggestion-title h4, body:not([data-theme="light"]) .experience-type,
+body:not([data-theme="light"]) .impact-dimension strong { color: #e6e0ef; }
+body:not([data-theme="light"]) .impact-question strong, body:not([data-theme="light"]) .impact-question p,
+body:not([data-theme="light"]) .impact-summary, body:not([data-theme="light"]) .interview-check p,
+body:not([data-theme="light"]) .interview-check strong { color: #d0cadb; }
+body:not([data-theme="light"]) .impact-question { border-color: #514638; }
+body:not([data-theme="light"]) .page-footer { color: #a7a0b2; }
 
 @media (max-width: 600px) {
   .topbar { height: 58px; padding: 0 16px; }
